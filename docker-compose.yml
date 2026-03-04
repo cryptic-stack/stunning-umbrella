@@ -9,7 +9,7 @@ services:
       REDIS_ADDR: redis:6379
       UPLOAD_DIR: /data/uploads
       EXPORT_DIR: /data/exports
-      FRONTEND_URL: http://localhost:3000
+      FRONTEND_URL: http://localhost
     ports:
       - "8080:8080"
     volumes:
@@ -79,7 +79,8 @@ services:
     environment:
       VITE_API_BASE_URL: http://localhost:8080
     ports:
-      - "3000:3000"
+      - "80:3000"
+      - "443:3000"
     depends_on:
       - api
 

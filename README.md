@@ -20,7 +20,8 @@ docker compose up --build
 Services:
 
 - API: `http://localhost:8080`
-- Frontend: `http://localhost:3000`
+- Frontend (HTTP): `http://localhost` (port 80)
+- Frontend (alt port): `http://localhost:443`
 - Postgres: `localhost:5432`
 - Redis: `localhost:6379`
 
