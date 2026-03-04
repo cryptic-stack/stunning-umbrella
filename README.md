@@ -26,11 +26,18 @@ Services:
 
 ## Core API Endpoints
 
+- `GET /` (API service info + frontend URL)
 - `POST /api/upload` (multipart, accepts `xlsx|csv|pdf`)
+- `GET /uploads`
+- `PUT /uploads/{id}/tag`
+- `DELETE /uploads/{id}?purge=true`
 - `GET /frameworks`
 - `GET /frameworks/{id}/versions`
 - `POST /compare`
+- `POST /compare` accepts optional `control_level` (`ALL`, `L1`, `L2`)
 - `GET /diff/{report_id}`
+- `GET /reports`
+- `GET /reports/{report_id}/download/{json|xlsx|html}`
 - `GET /health`
 
 ## Job Queues

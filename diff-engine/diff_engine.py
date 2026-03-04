@@ -12,6 +12,7 @@ from psycopg2.extras import RealDictCursor
 
 from diff_algorithms import compare_safeguards
 from diff_models import SafeguardRecord
+from reporting import export_report
 
 
 def get_db_connection():
@@ -31,9 +32,10 @@ def get_db_connection():
 def load_safeguards(version_id: int) -> Dict[str, SafeguardRecord]:
     with get_db_connection() as conn:
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("ALTER TABLE safeguards ADD COLUMN IF NOT EXISTS level TEXT DEFAULT ''")
             cur.execute(
                 """
-                SELECT safeguard_id, title, description, ig1, ig2, ig3
+                SELECT safeguard_id, title, description, COALESCE(level, '') AS level, ig1, ig2, ig3
                 FROM safeguards
                 WHERE version_id = %s
                 """,
@@ -46,12 +48,21 @@ def load_safeguards(version_id: int) -> Dict[str, SafeguardRecord]:
             safeguard_id=row["safeguard_id"],
             title=row.get("title") or "",
             description=row.get("description") or "",
+            level=(row.get("level") or "").upper(),
             ig1=bool(row.get("ig1")),
             ig2=bool(row.get("ig2")),
             ig3=bool(row.get("ig3")),
         )
         for row in rows
     }
+
+
+def filter_by_level(records: Dict[str, SafeguardRecord], control_level: str) -> Dict[str, SafeguardRecord]:
+    level = (control_level or "ALL").strip().upper()
+    if level not in {"L1", "L2"}:
+        return records
+
+    return {key: value for key, value in records.items() if (value.level or "").upper() == level}
 
 
 def persist_diff(report_id: int, results) -> int:
@@ -100,12 +111,21 @@ def process_job(payload: dict) -> dict:
     report_id = int(payload["report_id"])
     version_a_id = int(payload["version_a_id"])
     version_b_id = int(payload["version_b_id"])
+    control_level = (payload.get("control_level") or "ALL").strip().upper()
 
     left = load_safeguards(version_a_id)
     right = load_safeguards(version_b_id)
+    left = filter_by_level(left, control_level)
+    right = filter_by_level(right, control_level)
     results = compare_safeguards(left, right)
     count = persist_diff(report_id, results)
-    return {"report_id": report_id, "items": count}
+    export_dir = os.getenv("EXPORT_DIR", "/data/exports")
+    exports = {}
+    try:
+        exports = export_report(report_id, export_dir)
+    except Exception as exc:  # noqa: BLE001
+        print(json.dumps({"status": "warn", "report_id": report_id, "error": f"export failed: {exc}"}))
+    return {"report_id": report_id, "items": count, "control_level": control_level, "exports": exports}
 
 
 def run_worker() -> None:

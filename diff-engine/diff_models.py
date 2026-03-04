@@ -6,6 +6,7 @@ class SafeguardRecord:
     safeguard_id: str
     title: str
     description: str
+    level: str
     ig1: bool
     ig2: bool
     ig3: bool

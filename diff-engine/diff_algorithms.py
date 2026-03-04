@@ -49,6 +49,11 @@ def compare_safeguards(
     for old_id, new_id, score in renamed_pairs:
         old_item = safeguards_a[old_id]
         new_item = safeguards_b[new_id]
+
+        # Skip rename-only noise when text is effectively identical.
+        if score >= 100.0:
+            continue
+
         results.append(
             DiffResult(
                 change_type="renamed",

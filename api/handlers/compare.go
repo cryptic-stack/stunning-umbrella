@@ -3,17 +3,32 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/example/cis-benchmark-intelligence/api/models"
 	"github.com/gin-gonic/gin"
 )
 
 type compareRequest struct {
-	Framework   string `json:"framework"`
-	FrameworkID uint   `json:"framework_id"`
-	VersionA    string `json:"version_a"`
-	VersionB    string `json:"version_b"`
+	Framework    string `json:"framework"`
+	FrameworkID  uint   `json:"framework_id"`
+	VersionA     string `json:"version_a"`
+	VersionB     string `json:"version_b"`
+	ControlLevel string `json:"control_level"`
+}
+
+func buildReportName(framework, versionA, versionB, controlLevel string) string {
+	base := fmt.Sprintf("v%s -> v%s", versionA, versionB)
+	if strings.TrimSpace(framework) != "" {
+		base = fmt.Sprintf("%s v%s -> v%s", framework, versionA, versionB)
+	}
+	level := strings.ToUpper(strings.TrimSpace(controlLevel))
+	if level != "" && level != "ALL" {
+		return fmt.Sprintf("%s (%s)", base, level)
+	}
+	return base
 }
 
 func (h *Handler) CompareVersions(c *gin.Context) {
@@ -29,11 +44,21 @@ func (h *Handler) CompareVersions(c *gin.Context) {
 		return
 	}
 
+	controlLevel := strings.ToUpper(strings.TrimSpace(req.ControlLevel))
+	if controlLevel == "" {
+		controlLevel = "ALL"
+	}
+	if controlLevel != "ALL" && controlLevel != "L1" && controlLevel != "L2" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "control_level must be ALL, L1, or L2"})
+		return
+	}
+
 	report := models.DiffReport{
-		FrameworkID: framework.ID,
-		VersionA:    versionA.ID,
-		VersionB:    versionB.ID,
-		Status:      "queued",
+		FrameworkID:  framework.ID,
+		VersionA:     versionA.ID,
+		VersionB:     versionB.ID,
+		ControlLevel: controlLevel,
+		Status:       "queued",
 	}
 	if err := h.DB.Create(&report).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create diff report"})
@@ -41,13 +66,14 @@ func (h *Handler) CompareVersions(c *gin.Context) {
 	}
 
 	job := map[string]any{
-		"framework":    framework.Name,
-		"framework_id": framework.ID,
-		"version_a":    versionA.Version,
-		"version_b":    versionB.Version,
-		"version_a_id": versionA.ID,
-		"version_b_id": versionB.ID,
-		"report_id":    report.ID,
+		"framework":     framework.Name,
+		"framework_id":  framework.ID,
+		"version_a":     versionA.Version,
+		"version_b":     versionB.Version,
+		"version_a_id":  versionA.ID,
+		"version_b_id":  versionB.ID,
+		"control_level": controlLevel,
+		"report_id":     report.ID,
 	}
 	payload, _ := json.Marshal(job)
 	if err := h.Redis.RPush(context.Background(), "diff_jobs", payload).Err(); err != nil {
@@ -58,7 +84,16 @@ func (h *Handler) CompareVersions(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusAccepted, gin.H{"report_id": report.ID, "status": report.Status})
+	reportName := buildReportName(framework.Name, versionA.Version, versionB.Version, controlLevel)
+	c.JSON(http.StatusAccepted, gin.H{
+		"report_id":     report.ID,
+		"report_name":   reportName,
+		"status":        report.Status,
+		"control_level": controlLevel,
+		"framework":     framework.Name,
+		"version_a":     versionA.Version,
+		"version_b":     versionB.Version,
+	})
 }
 
 func (h *Handler) resolveComparison(req compareRequest) (models.Framework, models.Version, models.Version, error) {

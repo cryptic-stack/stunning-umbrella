@@ -26,6 +26,7 @@ func main() {
 	dsn := envOrDefault("DATABASE_URL", "host=postgres user=cis password=cis dbname=cisdb port=5432 sslmode=disable")
 	redisAddr := envOrDefault("REDIS_ADDR", "redis:6379")
 	uploadDir := envOrDefault("UPLOAD_DIR", "/data/uploads")
+	exportDir := envOrDefault("EXPORT_DIR", "/data/exports")
 	port := envOrDefault("API_PORT", "8080")
 
 	var db *gorm.DB
@@ -44,7 +45,7 @@ func main() {
 
 	redisClient := redis.NewClient(&redis.Options{Addr: redisAddr})
 
-	h := handlers.NewHandler(db, redisClient, uploadDir)
+	h := handlers.NewHandler(db, redisClient, uploadDir, exportDir)
 	authMiddleware, err := NewAuthMiddleware(context.Background())
 	if err != nil {
 		log.Fatalf("auth middleware initialization failed: %v", err)

@@ -25,3 +25,36 @@ def test_parse_excel_normalizes_rows(tmp_path):
     assert records[0].ig1 is True
     assert records[0].ig2 is True
     assert records[0].ig3 is False
+
+
+def test_parse_benchmark_style_rows_with_levels(tmp_path):
+    path = tmp_path / "benchmark.csv"
+    pd.DataFrame(
+        [
+            {
+                "Section #": "1.1",
+                "Recommendation #": "1.1.1",
+                "Title": "(L1) Ensure test setting is configured",
+                "Description": "Benchmark recommendation text",
+                "v8 IG1": "X",
+                "v8 IG2": "",
+                "v8 IG3": "",
+            },
+            {
+                "Section #": "1.1",
+                "Recommendation #": "1.1.2",
+                "Title": "(L2) Ensure stronger setting is configured",
+                "Description": "Second recommendation",
+                "v8 IG1": "",
+                "v8 IG2": "X",
+                "v8 IG3": "",
+            },
+        ]
+    ).to_csv(path, index=False)
+
+    records = parse_excel(str(path), framework="CIS Windows Benchmark", version="4.0.0")
+    assert len(records) == 2
+    assert records[0].safeguard_id == "1.1.1"
+    assert records[0].control_id == "1.1"
+    assert records[0].level == "L1"
+    assert records[1].level == "L2"

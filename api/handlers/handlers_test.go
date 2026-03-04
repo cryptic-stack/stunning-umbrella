@@ -13,7 +13,7 @@ import (
 
 func TestHealthEndpoint(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	h := NewHandler(nil, nil, t.TempDir())
+	h := NewHandler(nil, nil, t.TempDir(), t.TempDir())
 
 	r := gin.New()
 	r.GET("/health", h.Health)
@@ -29,7 +29,7 @@ func TestHealthEndpoint(t *testing.T) {
 
 func TestUploadRejectsMissingFile(t *testing.T) {
 	gin.SetMode(gin.TestMode)
-	h := NewHandler(nil, nil, t.TempDir())
+	h := NewHandler(nil, nil, t.TempDir(), t.TempDir())
 
 	r := gin.New()
 	r.POST("/api/upload", h.UploadFile)

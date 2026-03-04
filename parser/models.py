@@ -8,6 +8,7 @@ class CanonicalSafeguard(BaseModel):
     safeguard_id: str
     title: str
     description: str = ""
+    level: str = ""
     ig1: bool = False
     ig2: bool = False
     ig3: bool = False

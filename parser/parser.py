@@ -69,6 +69,10 @@ def ensure_framework_version(cur, framework: str, version: str, source_file: str
     return framework_id, version_id
 
 
+def ensure_schema_columns(cur) -> None:
+    cur.execute("ALTER TABLE safeguards ADD COLUMN IF NOT EXISTS level TEXT DEFAULT ''")
+
+
 def upsert_records(records: Iterable[CanonicalSafeguard], source_file: str, provided_version_id: int | None = None) -> int:
     records = list(records)
     if not records:
@@ -77,6 +81,7 @@ def upsert_records(records: Iterable[CanonicalSafeguard], source_file: str, prov
     inserted = 0
     with get_db_connection() as conn:
         with conn.cursor() as cur:
+            ensure_schema_columns(cur)
             framework = records[0].framework
             version = records[0].version
             framework_id, version_id = ensure_framework_version(cur, framework, version, source_file)
@@ -85,6 +90,8 @@ def upsert_records(records: Iterable[CanonicalSafeguard], source_file: str, prov
 
             for record in records:
                 control_id = record.control_id or record.safeguard_id.split(".", 1)[0]
+                level = (record.level or "").strip().upper()
+                safeguard_key = record.safeguard_id if not level else f"{record.safeguard_id}|{level}"
                 cur.execute(
                     """
                     INSERT INTO controls (framework_id, version_id, control_id, title, description)
@@ -100,13 +107,14 @@ def upsert_records(records: Iterable[CanonicalSafeguard], source_file: str, prov
                 cur.execute(
                     """
                     INSERT INTO safeguards (
-                        control_id, version_id, safeguard_id, title, description, ig1, ig2, ig3
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                        control_id, version_id, safeguard_id, title, description, level, ig1, ig2, ig3
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (version_id, safeguard_id)
                     DO UPDATE SET
                       control_id = EXCLUDED.control_id,
                       title = EXCLUDED.title,
                       description = EXCLUDED.description,
+                      level = EXCLUDED.level,
                       ig1 = EXCLUDED.ig1,
                       ig2 = EXCLUDED.ig2,
                       ig3 = EXCLUDED.ig3
@@ -114,9 +122,10 @@ def upsert_records(records: Iterable[CanonicalSafeguard], source_file: str, prov
                     (
                         control_pk,
                         version_id,
-                        record.safeguard_id,
+                        safeguard_key,
                         record.title,
                         record.description,
+                        level,
                         record.ig1,
                         record.ig2,
                         record.ig3,

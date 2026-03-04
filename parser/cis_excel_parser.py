@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
-from typing import List
+from typing import Iterable, List
 
 import pandas as pd
 
@@ -14,21 +15,35 @@ except ImportError:  # pragma: no cover
 COLUMN_ALIASES = {
     "framework": ["framework", "benchmark", "standard"],
     "version": ["version", "framework_version"],
-    "control_id": ["control_id", "control id", "control"],
-    "safeguard_id": ["safeguard_id", "safeguard id", "safeguard", "recommendation"],
+    "control_id": ["control_id", "control id", "control", "section #", "section"],
+    "safeguard_id": ["safeguard_id", "safeguard id", "safeguard", "recommendation", "recommendation #"],
     "title": ["title", "name", "safeguard title"],
     "description": ["description", "details", "rationale", "text"],
-    "ig1": ["ig1", "implementation group 1"],
-    "ig2": ["ig2", "implementation group 2"],
-    "ig3": ["ig3", "implementation group 3"],
+    "profile": ["profile"],
+    "ig1": ["ig1", "implementation group 1", "v8 ig1", "v7 ig1"],
+    "ig2": ["ig2", "implementation group 2", "v8 ig2", "v7 ig2"],
+    "ig3": ["ig3", "implementation group 3", "v8 ig3", "v7 ig3"],
 }
 
+LEVEL_PATTERN = re.compile(r"\((L1|L2)\)", re.IGNORECASE)
+RECOMMENDATION_PATTERN = re.compile(r"\d+(?:\.\d+)+")
 
-def _normalize_column_map(columns: list[str]) -> dict[str, str]:
+
+def _clean_text(value) -> str:
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if text.lower() in {"nan", "none"}:
+        return ""
+    return text
+
+
+def _normalize_column_map(columns: Iterable[str]) -> dict[str, str]:
     normalized = {}
     for column in columns:
-        key = str(column).strip().lower()
-        normalized[key] = str(column)
+        key = _clean_text(column).lower()
+        if key:
+            normalized[key] = str(column)
     return normalized
 
 
@@ -40,21 +55,48 @@ def _resolve_column(column_map: dict[str, str], target: str) -> str | None:
 
 
 def _to_bool(value) -> bool:
-    if isinstance(value, bool):
-        return value
-    if value is None:
-        return False
-    text = str(value).strip().lower()
+    text = _clean_text(value).lower()
     return text in {"1", "true", "yes", "y", "x"}
 
 
-def parse_excel(path: str, framework: str, version: str) -> List[CanonicalSafeguard]:
-    source = Path(path)
-    if source.suffix.lower() == ".csv":
-        df = pd.read_csv(source)
-    else:
-        df = pd.read_excel(source)
+def _normalize_recommendation(value: str) -> str:
+    text = _clean_text(value)
+    if not text:
+        return ""
+    match = RECOMMENDATION_PATTERN.search(text)
+    if not match:
+        return ""
+    return match.group(0)
 
+
+def _derive_control_id(section_value: str, safeguard_id: str) -> str:
+    section = _clean_text(section_value)
+    if RECOMMENDATION_PATTERN.search(section):
+        return section
+
+    parts = safeguard_id.split(".")
+    if len(parts) >= 2:
+        return ".".join(parts[:-1])
+    if parts:
+        return parts[0]
+    return ""
+
+
+def _extract_level(title: str, recommendation: str, profile: str, sheet_name: str) -> str:
+    for source in (title, recommendation, profile, sheet_name):
+        match = LEVEL_PATTERN.search(_clean_text(source))
+        if match:
+            return match.group(1).upper()
+
+    lowered_sheet = _clean_text(sheet_name).lower()
+    if "level 1" in lowered_sheet:
+        return "L1"
+    if "level 2" in lowered_sheet:
+        return "L2"
+    return ""
+
+
+def _parse_dataframe(df: pd.DataFrame, framework: str, version: str, sheet_name: str) -> list[CanonicalSafeguard]:
     df = df.fillna("")
     column_map = _normalize_column_map(list(df.columns))
 
@@ -64,34 +106,85 @@ def parse_excel(path: str, framework: str, version: str) -> List[CanonicalSafegu
     safeguard_col = _resolve_column(column_map, "safeguard_id")
     title_col = _resolve_column(column_map, "title")
     description_col = _resolve_column(column_map, "description")
+    profile_col = _resolve_column(column_map, "profile")
     ig1_col = _resolve_column(column_map, "ig1")
     ig2_col = _resolve_column(column_map, "ig2")
     ig3_col = _resolve_column(column_map, "ig3")
 
     records: list[CanonicalSafeguard] = []
+
     for _, row in df.iterrows():
-        safeguard_id = str(row.get(safeguard_col, "")).strip() if safeguard_col else ""
+        raw_recommendation = _clean_text(row.get(safeguard_col, "")) if safeguard_col else ""
+        safeguard_id = _normalize_recommendation(raw_recommendation)
         if not safeguard_id:
             continue
 
-        control_id = str(row.get(control_col, "")).strip() if control_col else ""
-        if not control_id and "." in safeguard_id:
-            control_id = safeguard_id.split(".", 1)[0]
+        title = _clean_text(row.get(title_col, "")) if title_col else ""
+        description = _clean_text(row.get(description_col, "")) if description_col else ""
+        profile = _clean_text(row.get(profile_col, "")) if profile_col else ""
+        level = _extract_level(title, raw_recommendation, profile, sheet_name)
 
-        title = str(row.get(title_col, "")).strip() if title_col else ""
-        description = str(row.get(description_col, "")).strip() if description_col else ""
+        control_value = _clean_text(row.get(control_col, "")) if control_col else ""
+        control_id = _derive_control_id(control_value, safeguard_id)
+        if not control_id:
+            continue
 
-        record = CanonicalSafeguard(
-            framework=str(row.get(framework_col, framework)).strip() if framework_col else framework,
-            version=str(row.get(version_col, version)).strip() if version_col else version,
-            control_id=control_id,
-            safeguard_id=safeguard_id,
-            title=title,
-            description=description,
-            ig1=_to_bool(row.get(ig1_col, False)) if ig1_col else False,
-            ig2=_to_bool(row.get(ig2_col, False)) if ig2_col else False,
-            ig3=_to_bool(row.get(ig3_col, False)) if ig3_col else False,
+        records.append(
+            CanonicalSafeguard(
+                framework=_clean_text(row.get(framework_col, framework)) if framework_col else framework,
+                version=_clean_text(row.get(version_col, version)) if version_col else version,
+                control_id=control_id,
+                safeguard_id=safeguard_id,
+                title=title,
+                description=description,
+                level=level,
+                ig1=_to_bool(row.get(ig1_col, False)) if ig1_col else False,
+                ig2=_to_bool(row.get(ig2_col, False)) if ig2_col else False,
+                ig3=_to_bool(row.get(ig3_col, False)) if ig3_col else False,
+            )
         )
-        records.append(record)
 
     return records
+
+
+def _select_sheets(sheet_names: list[str]) -> list[str]:
+    combined = [name for name in sheet_names if "combined profiles" in name.lower()]
+    if combined:
+        return combined
+
+    selected = []
+    for name in sheet_names:
+        lowered = name.lower()
+        if "license" in lowered:
+            continue
+        selected.append(name)
+    return selected
+
+
+def _deduplicate(records: list[CanonicalSafeguard]) -> list[CanonicalSafeguard]:
+    seen = set()
+    unique: list[CanonicalSafeguard] = []
+    for record in records:
+        key = (record.framework.lower(), record.version, record.safeguard_id, record.level)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(record)
+    return unique
+
+
+def parse_excel(path: str, framework: str, version: str) -> List[CanonicalSafeguard]:
+    source = Path(path)
+
+    if source.suffix.lower() == ".csv":
+        df = pd.read_csv(source)
+        return _deduplicate(_parse_dataframe(df, framework, version, "csv"))
+
+    workbook = pd.ExcelFile(source, engine="openpyxl")
+    records: list[CanonicalSafeguard] = []
+
+    for sheet_name in _select_sheets(workbook.sheet_names):
+        df = pd.read_excel(source, sheet_name=sheet_name)
+        records.extend(_parse_dataframe(df, framework, version, sheet_name))
+
+    return _deduplicate(records)

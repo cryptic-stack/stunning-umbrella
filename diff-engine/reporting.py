@@ -27,7 +27,27 @@ def get_db_connection():
 def fetch_report(report_id: int):
     with get_db_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("SELECT id, framework_id, version_a, version_b, status, created_at FROM diff_reports WHERE id = %s", (report_id,))
+            cur.execute(
+                """
+                SELECT
+                    dr.id,
+                    dr.framework_id,
+                    dr.version_a,
+                    dr.version_b,
+                    COALESCE(NULLIF(dr.control_level, ''), 'ALL') AS control_level,
+                    dr.status,
+                    dr.created_at,
+                    COALESCE(f.name, '') AS framework_name,
+                    COALESCE(va.version, '') AS version_a_label,
+                    COALESCE(vb.version, '') AS version_b_label
+                FROM diff_reports dr
+                LEFT JOIN frameworks f ON f.id = dr.framework_id
+                LEFT JOIN versions va ON va.id = dr.version_a
+                LEFT JOIN versions vb ON vb.id = dr.version_b
+                WHERE dr.id = %s
+                """,
+                (report_id,),
+            )
             report = cur.fetchone()
             if not report:
                 raise ValueError(f"Report {report_id} does not exist")
@@ -46,6 +66,22 @@ def fetch_report(report_id: int):
     return report, items
 
 
+def build_report_name(framework: str, version_a: str, version_b: str, control_level: str) -> str:
+    framework = (framework or "").strip()
+    version_a = (version_a or "").strip()
+    version_b = (version_b or "").strip()
+    control_level = (control_level or "ALL").strip().upper()
+
+    if framework:
+        base = f"{framework} v{version_a} -> v{version_b}"
+    else:
+        base = f"v{version_a} -> v{version_b}"
+
+    if control_level and control_level != "ALL":
+        return f"{base} ({control_level})"
+    return base
+
+
 def export_report(report_id: int, output_dir: str) -> dict:
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -58,8 +94,13 @@ def export_report(report_id: int, output_dir: str) -> dict:
             "framework_id": report[1],
             "version_a": report[2],
             "version_b": report[3],
-            "status": report[4],
-            "created_at": str(report[5]),
+            "control_level": report[4],
+            "status": report[5],
+            "created_at": str(report[6]),
+            "framework": report[7],
+            "version_a_label": report[8],
+            "version_b_label": report[9],
+            "report_name": build_report_name(report[7], report[8], report[9], report[4]),
         },
         "items": [
             {

@@ -3,6 +3,7 @@ import { AppBar, Box, Container, CssBaseline, Tab, Tabs, Toolbar, Typography } f
 import UploadBenchmarks from "./pages/UploadBenchmarks";
 import VersionComparison from "./pages/VersionComparison";
 import DiffViewer from "./pages/DiffViewer";
+import Settings from "./pages/Settings";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
 
@@ -13,8 +14,9 @@ export default function App() {
   const views = useMemo(
     () => [
       <UploadBenchmarks key="upload" apiBase={API_BASE} />,
-      <VersionComparison key="compare" apiBase={API_BASE} onReportCreated={setReportId} />, 
+      <VersionComparison key="compare" apiBase={API_BASE} onReportCreated={setReportId} />,
       <DiffViewer key="diff" apiBase={API_BASE} reportId={reportId} onReportIdChange={setReportId} />,
+      <Settings key="settings" apiBase={API_BASE} />,
     ],
     [reportId]
   );
@@ -35,6 +37,7 @@ export default function App() {
             <Tab label="Upload Benchmarks" />
             <Tab label="Version Comparison" />
             <Tab label="Diff Viewer" />
+            <Tab label="Settings" />
           </Tabs>
         </Box>
         {views[tab]}

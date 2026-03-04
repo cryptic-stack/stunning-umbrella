@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>CIS Diff Report {{ report.id }}</title>
+    <title>{{ report.report_name }}</title>
     <style>
       body { font-family: Arial, sans-serif; margin: 24px; }
       table { border-collapse: collapse; width: 100%; }
@@ -11,8 +11,9 @@
     </style>
   </head>
   <body>
-    <h1>CIS Diff Report {{ report.id }}</h1>
-    <p>Framework ID: {{ report.framework_id }} | Version IDs: {{ report.version_a }} ? {{ report.version_b }}</p>
+    <h1>{{ report.report_name }}</h1>
+    <p>Report ID: {{ report.id }}</p>
+    <p>Framework: {{ report.framework }} | Versions: {{ report.version_a_label }} -> {{ report.version_b_label }}</p>
     <p>Status: {{ report.status }} | Created: {{ report.created_at }}</p>
     <table>
       <thead>
