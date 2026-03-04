@@ -1,11 +1,17 @@
 import React, { useMemo, useState } from "react";
 import { AppBar, Box, Container, CssBaseline, Tab, Tabs, Toolbar, Typography } from "@mui/material";
+import { ThemeProvider, createTheme } from "@mui/material/styles";
 import UploadBenchmarks from "./pages/UploadBenchmarks";
 import VersionComparison from "./pages/VersionComparison";
 import DiffViewer from "./pages/DiffViewer";
 import Settings from "./pages/Settings";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+const appTheme = createTheme({
+  palette: {
+    mode: "dark",
+  },
+});
 
 export default function App() {
   const [tab, setTab] = useState(0);
@@ -22,7 +28,7 @@ export default function App() {
   );
 
   return (
-    <>
+    <ThemeProvider theme={appTheme}>
       <CssBaseline />
       <AppBar position="static" color="default">
         <Toolbar>
@@ -42,6 +48,6 @@ export default function App() {
         </Box>
         {views[tab]}
       </Container>
-    </>
+    </ThemeProvider>
   );
 }
