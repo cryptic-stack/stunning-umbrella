@@ -1,0 +1,15 @@
+FROM golang:1.23-alpine AS builder
+WORKDIR /src
+
+COPY collector/go.mod ./collector/go.mod
+RUN cd collector && go mod download
+
+COPY collector ./collector
+RUN cd collector && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /bin/collector .
+
+FROM alpine:3.20
+RUN adduser -D appuser
+USER appuser
+WORKDIR /app
+COPY --from=builder /bin/collector /usr/local/bin/collector
+ENTRYPOINT ["/usr/local/bin/collector"]

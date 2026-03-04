@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>CIS Diff Report {{ report.id }}</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 24px; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { border: 1px solid #ddd; padding: 8px; vertical-align: top; }
+      th { background: #f5f5f5; }
+    </style>
+  </head>
+  <body>
+    <h1>CIS Diff Report {{ report.id }}</h1>
+    <p>Framework ID: {{ report.framework_id }} | Version IDs: {{ report.version_a }} ? {{ report.version_b }}</p>
+    <p>Status: {{ report.status }} | Created: {{ report.created_at }}</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Old Safeguard</th>
+          <th>New Safeguard</th>
+          <th>Similarity</th>
+          <th>Old Text</th>
+          <th>New Text</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+        <tr>
+          <td>{{ item.change_type }}</td>
+          <td>{{ item.safeguard_old }}</td>
+          <td>{{ item.safeguard_new }}</td>
+          <td>{{ item.similarity }}</td>
+          <td>{{ item.old_text }}</td>
+          <td>{{ item.new_text }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </body>
+</html>

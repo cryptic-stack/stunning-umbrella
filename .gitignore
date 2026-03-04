@@ -1,0 +1,27 @@
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Python
+**/__pycache__/
+*.pyc
+.pytest_cache/
+
+# Go
+*.test
+
+# Runtime data
+storage/postgres/*
+!storage/postgres/.gitkeep
+
+data/uploads/*
+!data/uploads/.gitkeep
+
+data/downloads/*
+!data/downloads/.gitkeep
+
+data/exports/*
+!data/exports/.gitkeep
+
+# Local env
+.env

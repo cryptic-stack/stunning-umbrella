@@ -1,0 +1,9 @@
+FROM python:3.12-slim
+WORKDIR /app
+
+COPY diff-engine/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY diff-engine ./diff-engine
+WORKDIR /app/diff-engine
+ENTRYPOINT ["python", "diff_engine.py", "--worker"]
