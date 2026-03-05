@@ -67,6 +67,15 @@ type cisBenchFile struct {
 	ModifiedAt time.Time `json:"modified_at"`
 }
 
+type cookieInputRecord struct {
+	Name    string
+	Value   string
+	Domain  string
+	Path    string
+	Secure  bool
+	Expires int64
+}
+
 func cisBenchEnabled() bool {
 	return strings.EqualFold(strings.TrimSpace(os.Getenv("CIS_BENCH_TESTING_ENABLED")), "true")
 }
@@ -140,6 +149,267 @@ func runCISBench(ctx context.Context, noVerifySSL bool, args ...string) (string,
 	}
 
 	return strings.TrimSpace(stdout.String()), strings.TrimSpace(stderr.String()), err
+}
+
+func parseCookieBool(value any, fallback bool) bool {
+	switch v := value.(type) {
+	case bool:
+		return v
+	case float64:
+		return v != 0
+	case string:
+		switch strings.ToLower(strings.TrimSpace(v)) {
+		case "true", "1", "yes", "y":
+			return true
+		case "false", "0", "no", "n":
+			return false
+		default:
+			return fallback
+		}
+	default:
+		return fallback
+	}
+}
+
+func parseCookieInt64(value any, fallback int64) int64 {
+	switch v := value.(type) {
+	case float64:
+		return int64(v)
+	case int64:
+		return v
+	case int:
+		return int64(v)
+	case json.Number:
+		if parsed, err := v.Int64(); err == nil {
+			return parsed
+		}
+	case string:
+		if parsed, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64); err == nil {
+			return parsed
+		}
+	}
+	return fallback
+}
+
+func toCookieInputRecord(input map[string]any) (cookieInputRecord, bool) {
+	name, _ := input["name"].(string)
+	if strings.TrimSpace(name) == "" {
+		if alt, ok := input["Name"].(string); ok {
+			name = alt
+		}
+	}
+	value, _ := input["value"].(string)
+	if value == "" {
+		if alt, ok := input["Value"].(string); ok {
+			value = alt
+		}
+	}
+	if strings.TrimSpace(name) == "" {
+		return cookieInputRecord{}, false
+	}
+
+	domain, _ := input["domain"].(string)
+	if strings.TrimSpace(domain) == "" {
+		if alt, ok := input["Domain"].(string); ok {
+			domain = alt
+		}
+	}
+	if strings.TrimSpace(domain) == "" {
+		domain = ".workbench.cisecurity.org"
+	}
+
+	path, _ := input["path"].(string)
+	if strings.TrimSpace(path) == "" {
+		if alt, ok := input["Path"].(string); ok {
+			path = alt
+		}
+	}
+	if strings.TrimSpace(path) == "" {
+		path = "/"
+	}
+
+	expires := time.Now().Add(7 * 24 * time.Hour).Unix()
+	for _, key := range []string{"expirationDate", "expires", "expiry", "expires_utc"} {
+		if raw, ok := input[key]; ok {
+			expires = parseCookieInt64(raw, expires)
+			break
+		}
+	}
+
+	secure := true
+	for _, key := range []string{"secure", "Secure"} {
+		if raw, ok := input[key]; ok {
+			secure = parseCookieBool(raw, secure)
+			break
+		}
+	}
+
+	return cookieInputRecord{
+		Name:    strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(name, "\n", ""), "\t", "")),
+		Value:   strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(value, "\n", ""), "\t", "")),
+		Domain:  strings.TrimSpace(domain),
+		Path:    strings.TrimSpace(path),
+		Secure:  secure,
+		Expires: expires,
+	}, true
+}
+
+func recordsToNetscapeCookies(records []cookieInputRecord) (string, error) {
+	if len(records) == 0 {
+		return "", fmt.Errorf("no cookies were found in the provided input")
+	}
+
+	lines := []string{"# Netscape HTTP Cookie File"}
+	for _, record := range records {
+		if record.Name == "" {
+			continue
+		}
+		domain := record.Domain
+		if domain == "" {
+			domain = ".workbench.cisecurity.org"
+		}
+		path := record.Path
+		if path == "" {
+			path = "/"
+		}
+		expires := record.Expires
+		if expires <= 0 {
+			expires = time.Now().Add(7 * 24 * time.Hour).Unix()
+		}
+
+		includeSubdomains := "FALSE"
+		if strings.HasPrefix(domain, ".") {
+			includeSubdomains = "TRUE"
+		}
+		secureValue := "FALSE"
+		if record.Secure {
+			secureValue = "TRUE"
+		}
+
+		lines = append(lines, fmt.Sprintf("%s\t%s\t%s\t%s\t%d\t%s\t%s",
+			domain,
+			includeSubdomains,
+			path,
+			secureValue,
+			expires,
+			record.Name,
+			record.Value,
+		))
+	}
+
+	if len(lines) == 1 {
+		return "", fmt.Errorf("no valid cookie entries were found")
+	}
+	return strings.Join(lines, "\n") + "\n", nil
+}
+
+func parseCookieHeader(raw string) []cookieInputRecord {
+	records := []cookieInputRecord{}
+	for _, segment := range strings.Split(raw, ";") {
+		part := strings.TrimSpace(segment)
+		if part == "" {
+			continue
+		}
+		eq := strings.Index(part, "=")
+		if eq <= 0 {
+			continue
+		}
+		name := strings.TrimSpace(part[:eq])
+		value := strings.TrimSpace(part[eq+1:])
+		if name == "" {
+			continue
+		}
+		records = append(records, cookieInputRecord{
+			Name:    name,
+			Value:   value,
+			Domain:  ".workbench.cisecurity.org",
+			Path:    "/",
+			Secure:  true,
+			Expires: time.Now().Add(7 * 24 * time.Hour).Unix(),
+		})
+	}
+	return records
+}
+
+func normalizeCookiesInput(raw string) (string, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", fmt.Errorf("cookie input is empty")
+	}
+
+	// Already Netscape format.
+	if strings.Contains(trimmed, "\t") || strings.HasPrefix(trimmed, "# Netscape HTTP Cookie File") {
+		if strings.HasPrefix(trimmed, "# Netscape HTTP Cookie File") {
+			return trimmed + "\n", nil
+		}
+		return "# Netscape HTTP Cookie File\n" + trimmed + "\n", nil
+	}
+
+	// JSON cookie exports from browser extensions or devtools.
+	if strings.HasPrefix(trimmed, "[") || strings.HasPrefix(trimmed, "{") {
+		var arrayPayload []map[string]any
+		if err := json.Unmarshal([]byte(trimmed), &arrayPayload); err == nil {
+			records := make([]cookieInputRecord, 0, len(arrayPayload))
+			for _, item := range arrayPayload {
+				if record, ok := toCookieInputRecord(item); ok {
+					records = append(records, record)
+				}
+			}
+			if len(records) > 0 {
+				return recordsToNetscapeCookies(records)
+			}
+		}
+
+		var objectPayload map[string]any
+		if err := json.Unmarshal([]byte(trimmed), &objectPayload); err == nil {
+			if cookiesRaw, ok := objectPayload["cookies"]; ok {
+				if cookiesArray, ok := cookiesRaw.([]any); ok {
+					records := make([]cookieInputRecord, 0, len(cookiesArray))
+					for _, item := range cookiesArray {
+						if cookieMap, ok := item.(map[string]any); ok {
+							if record, parsed := toCookieInputRecord(cookieMap); parsed {
+								records = append(records, record)
+							}
+						}
+					}
+					if len(records) > 0 {
+						return recordsToNetscapeCookies(records)
+					}
+				}
+			}
+
+			// Simple name/value JSON map fallback.
+			records := []cookieInputRecord{}
+			for key, value := range objectPayload {
+				if key == "" {
+					continue
+				}
+				valueString := strings.TrimSpace(fmt.Sprintf("%v", value))
+				if valueString == "" || strings.EqualFold(valueString, "<nil>") {
+					continue
+				}
+				records = append(records, cookieInputRecord{
+					Name:    key,
+					Value:   valueString,
+					Domain:  ".workbench.cisecurity.org",
+					Path:    "/",
+					Secure:  true,
+					Expires: time.Now().Add(7 * 24 * time.Hour).Unix(),
+				})
+			}
+			if len(records) > 0 {
+				return recordsToNetscapeCookies(records)
+			}
+		}
+	}
+
+	// Raw Cookie header format: "name=value; name2=value2".
+	headerRecords := parseCookieHeader(strings.TrimPrefix(trimmed, "Cookie:"))
+	if len(headerRecords) > 0 {
+		return recordsToNetscapeCookies(headerRecords)
+	}
+
+	return "", fmt.Errorf("unsupported cookie input format; provide Netscape, JSON export, or Cookie header format")
 }
 
 func parseJSONPayload(payload string, target any) error {
@@ -216,13 +486,23 @@ func (h *Handler) CISBenchLogin(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "cookies_text is required for cookies mode"})
 			return
 		}
+
+		normalizedCookies, err := normalizeCookiesInput(cookies)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "failed to parse cookie input",
+				"hint":  err.Error(),
+			})
+			return
+		}
+
 		file, err := os.CreateTemp("", "cis-bench-cookies-*.txt")
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create temporary cookies file"})
 			return
 		}
 		tempCookiePath = file.Name()
-		if _, err := file.WriteString(cookies); err != nil {
+		if _, err := file.WriteString(normalizedCookies); err != nil {
 			_ = file.Close()
 			_ = os.Remove(tempCookiePath)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to write cookies file"})
@@ -260,8 +540,12 @@ func (h *Handler) CISBenchLogin(c *gin.Context) {
 
 	stdout, stderr, err := runCISBench(ctx, req.NoVerifySSL, args...)
 	if err != nil {
+		reason := "cis-bench login failed"
+		if mode == "browser" && strings.TrimSpace(stderr) != "" {
+			reason = "browser cookie extraction failed in API runtime; use pasted/exported cookies from your host browser"
+		}
 		c.JSON(http.StatusBadRequest, gin.H{
-			"error":  "cis-bench login failed",
+			"error":  reason,
 			"stdout": stdout,
 			"stderr": stderr,
 		})

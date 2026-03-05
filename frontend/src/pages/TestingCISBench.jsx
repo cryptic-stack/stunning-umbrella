@@ -37,6 +37,15 @@ export default function TestingCISBench({ apiBase }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
+  const extractApiError = (requestError, fallback) => {
+    const data = requestError?.response?.data;
+    if (!data) {
+      return fallback;
+    }
+    const parts = [data.error, data.hint, data.stderr].filter((part) => Boolean(String(part || "").trim()));
+    return parts.length > 0 ? parts.join(" | ") : fallback;
+  };
+
   const loadStatus = async () => {
     try {
       const response = await axios.get(`${apiBase}/testing/cis-bench/status`);
@@ -79,7 +88,12 @@ export default function TestingCISBench({ apiBase }) {
       setMessage(response.data?.message || "Generated session cookie from browser.");
       await loadStatus();
     } catch (loginError) {
-      setError(loginError?.response?.data?.error || "Failed to generate cookie session from browser.");
+      setError(
+        extractApiError(
+          loginError,
+          "Failed to generate cookie session from browser. In Docker, use exported/pasted cookies from your host browser."
+        )
+      );
     } finally {
       setBusy(false);
     }
@@ -137,7 +151,7 @@ export default function TestingCISBench({ apiBase }) {
       setMessage(response.data?.message || "Logged in to cis-bench.");
       await loadStatus();
     } catch (loginError) {
-      setError(loginError?.response?.data?.error || "cis-bench login failed.");
+      setError(extractApiError(loginError, "cis-bench login failed."));
     } finally {
       setBusy(false);
     }
@@ -151,7 +165,7 @@ export default function TestingCISBench({ apiBase }) {
       setMessage(response.data?.message || "Logged out.");
       await loadStatus();
     } catch (logoutError) {
-      setError(logoutError?.response?.data?.error || "Logout failed.");
+      setError(extractApiError(logoutError, "Logout failed."));
     } finally {
       setBusy(false);
     }
@@ -167,7 +181,7 @@ export default function TestingCISBench({ apiBase }) {
       });
       setMessage(response.data?.message || "Catalog refresh complete.");
     } catch (refreshError) {
-      setError(refreshError?.response?.data?.error || "Catalog refresh failed.");
+      setError(extractApiError(refreshError, "Catalog refresh failed."));
     } finally {
       setBusy(false);
     }
@@ -181,7 +195,7 @@ export default function TestingCISBench({ apiBase }) {
       setSearchResults(response.data?.results || []);
       setMessage(`Found ${response.data?.count || 0} benchmark(s).`);
     } catch (searchError) {
-      setError(searchError?.response?.data?.error || "Search failed.");
+      setError(extractApiError(searchError, "Search failed."));
       setSearchResults([]);
     } finally {
       setBusy(false);
@@ -206,7 +220,7 @@ export default function TestingCISBench({ apiBase }) {
       setDownloadBenchmarkId("");
       await loadFiles();
     } catch (downloadError) {
-      setError(downloadError?.response?.data?.error || "Download failed.");
+      setError(extractApiError(downloadError, "Download failed."));
     } finally {
       setBusy(false);
     }
@@ -222,7 +236,10 @@ export default function TestingCISBench({ apiBase }) {
         <Stack spacing={2}>
           <Typography variant="subtitle1">Login</Typography>
           <Typography variant="body2">
-            Workflow: 1) Open CIS login page, 2) sign in, 3) generate session cookie from browser, 4) export/copy cookies if needed.
+            Workflow: 1) Open CIS login page, 2) sign in, 3) export cookies from your browser, 4) paste them here and click Use Pasted Cookies.
+          </Typography>
+          <Typography variant="body2">
+            Supported cookie input formats: Netscape cookie text, JSON cookie export, or raw "Cookie: name=value; ..." header.
           </Typography>
           <FormControlLabel
             control={<Checkbox checked={noVerifySSL} onChange={(event) => setNoVerifySSL(event.target.checked)} />}
