@@ -67,6 +67,59 @@ export default function TestingCISBench({ apiBase }) {
     setError("");
   };
 
+  const loginWithBrowser = async () => {
+    clearMessages();
+    setBusy(true);
+    try {
+      const response = await axios.post(`${apiBase}/testing/cis-bench/login`, {
+        mode: "browser",
+        browser,
+        no_verify_ssl: noVerifySSL,
+      });
+      setMessage(response.data?.message || "Generated session cookie from browser.");
+      await loadStatus();
+    } catch (loginError) {
+      setError(loginError?.response?.data?.error || "Failed to generate cookie session from browser.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const exportSavedCookies = async () => {
+    clearMessages();
+    setBusy(true);
+    try {
+      const response = await axios.get(`${apiBase}/testing/cis-bench/cookies/export`);
+      const cookieText = response.data?.cookies_text || "";
+      setCookiesText(cookieText);
+      setMessage(cookieText ? "Exported saved session cookies into the editor." : "No cookie content found.");
+    } catch (exportError) {
+      setError(exportError?.response?.data?.error || "Failed to export saved cookies.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const copyCookiesToClipboard = async () => {
+    clearMessages();
+    if (!cookiesText.trim()) {
+      setError("No cookie text available to copy.");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(cookiesText);
+      setMessage("Cookie text copied to clipboard.");
+    } catch {
+      setError("Clipboard copy failed.");
+    }
+  };
+
+  const openWorkbenchLogin = () => {
+    window.open("https://workbench.cisecurity.org/", "_blank", "noopener,noreferrer");
+    setMessage("Opened CIS WorkBench login page in a new tab.");
+    setError("");
+  };
+
   const loginWithCookies = async () => {
     clearMessages();
     if (!cookiesText.trim()) {
@@ -82,28 +135,9 @@ export default function TestingCISBench({ apiBase }) {
         no_verify_ssl: noVerifySSL,
       });
       setMessage(response.data?.message || "Logged in to cis-bench.");
-      setCookiesText("");
       await loadStatus();
     } catch (loginError) {
       setError(loginError?.response?.data?.error || "cis-bench login failed.");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const loginWithBrowser = async () => {
-    clearMessages();
-    setBusy(true);
-    try {
-      const response = await axios.post(`${apiBase}/testing/cis-bench/login`, {
-        mode: "browser",
-        browser,
-        no_verify_ssl: noVerifySSL,
-      });
-      setMessage(response.data?.message || "Attempted browser login.");
-      await loadStatus();
-    } catch (loginError) {
-      setError(loginError?.response?.data?.error || "Browser login failed.");
     } finally {
       setBusy(false);
     }
@@ -188,7 +222,7 @@ export default function TestingCISBench({ apiBase }) {
         <Stack spacing={2}>
           <Typography variant="subtitle1">Login</Typography>
           <Typography variant="body2">
-            Use cookie login for containerized environments. Browser login may fail if no browser profile exists in the API container.
+            Workflow: 1) Open CIS login page, 2) sign in, 3) generate session cookie from browser, 4) export/copy cookies if needed.
           </Typography>
           <FormControlLabel
             control={<Checkbox checked={noVerifySSL} onChange={(event) => setNoVerifySSL(event.target.checked)} />}
@@ -215,11 +249,22 @@ export default function TestingCISBench({ apiBase }) {
             fullWidth
           />
           <Stack direction="row" spacing={1}>
-            <Button variant="contained" onClick={loginWithCookies} disabled={busy}>
-              Login with Cookies
+            <Button variant="outlined" onClick={openWorkbenchLogin} disabled={busy}>
+              Open CIS Login Page
             </Button>
-            <Button variant="outlined" onClick={loginWithBrowser} disabled={busy}>
-              Login with Browser
+            <Button variant="contained" onClick={loginWithBrowser} disabled={busy}>
+              Generate Cookie Session
+            </Button>
+            <Button variant="outlined" onClick={exportSavedCookies} disabled={busy}>
+              Export Saved Cookies
+            </Button>
+            <Button variant="outlined" onClick={copyCookiesToClipboard} disabled={busy}>
+              Copy Cookies
+            </Button>
+          </Stack>
+          <Stack direction="row" spacing={1}>
+            <Button variant="contained" onClick={loginWithCookies} disabled={busy}>
+              Use Pasted Cookies
             </Button>
             <Button variant="outlined" onClick={logout} disabled={busy}>
               Logout

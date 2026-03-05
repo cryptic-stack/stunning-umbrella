@@ -87,6 +87,39 @@ func cisBenchDownloadDir() string {
 	return "/data/downloads/cis-bench"
 }
 
+func cisBenchSessionFileCandidates() []string {
+	override := strings.TrimSpace(os.Getenv("CIS_BENCH_SESSION_FILE"))
+	candidates := []string{}
+	if override != "" {
+		candidates = append(candidates, override)
+	}
+
+	home := strings.TrimSpace(os.Getenv("HOME"))
+	if home != "" {
+		candidates = append(candidates, filepath.Join(home, ".cis-bench", "session.cookies"))
+	}
+	candidates = append(candidates,
+		"/data/cisbench/.cis-bench/session.cookies",
+		"/home/appuser/.cis-bench/session.cookies",
+		"/root/.cis-bench/session.cookies",
+	)
+
+	seen := map[string]struct{}{}
+	deduped := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		trimmed := strings.TrimSpace(candidate)
+		if trimmed == "" {
+			continue
+		}
+		if _, exists := seen[trimmed]; exists {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		deduped = append(deduped, trimmed)
+	}
+	return deduped
+}
+
 func runCISBench(ctx context.Context, noVerifySSL bool, args ...string) (string, string, error) {
 	cmd := exec.CommandContext(ctx, "cis-bench", args...)
 
@@ -274,6 +307,75 @@ func (h *Handler) CISBenchLogout(c *gin.Context) {
 		"message": "cis-bench logout successful",
 		"stdout":  stdout,
 		"stderr":  stderr,
+	})
+}
+
+func (h *Handler) CISBenchExportCookies(c *gin.Context) {
+	if !h.ensureCISBenchEnabled(c) {
+		return
+	}
+
+	candidates := cisBenchSessionFileCandidates()
+
+	// Prefer the explicit path reported by cis-bench status when available.
+	statusCtx, statusCancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	defer statusCancel()
+	if statusOut, _, statusErr := runCISBench(statusCtx, false, "auth", "status", "--output-format", "json"); statusErr == nil {
+		status := cisBenchAuthStatus{}
+		if parseErr := parseJSONPayload(statusOut, &status); parseErr == nil {
+			if sessionFile := strings.TrimSpace(status.SessionFile); sessionFile != "" {
+				candidates = append([]string{sessionFile}, candidates...)
+			}
+		}
+	}
+
+	var absPath string
+	var info os.FileInfo
+	for _, candidate := range candidates {
+		resolved, err := filepath.Abs(candidate)
+		if err != nil {
+			continue
+		}
+		stat, err := os.Stat(resolved)
+		if err != nil {
+			continue
+		}
+		if stat.IsDir() {
+			continue
+		}
+		absPath = resolved
+		info = stat
+		break
+	}
+
+	if absPath == "" || info == nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error":          "no saved session cookie file found",
+			"searched_paths": candidates,
+		})
+		return
+	}
+
+	if info.Size() > (2 * 1024 * 1024) {
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "session cookie file is too large"})
+		return
+	}
+
+	content, err := os.ReadFile(absPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "no saved session cookie file found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to read session cookie file"})
+		return
+	}
+
+	c.Header("Cache-Control", "no-store")
+	c.JSON(http.StatusOK, gin.H{
+		"session_file": absPath,
+		"cookies_text": string(content),
+		"bytes":        len(content),
 	})
 }
 

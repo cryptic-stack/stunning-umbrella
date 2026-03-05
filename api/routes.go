@@ -37,6 +37,7 @@ func RegisterRoutes(r *gin.Engine, h *handlers.Handler, authMiddleware gin.Handl
 	protected.GET("/testing/cis-bench/status", h.CISBenchStatus)
 	protected.POST("/testing/cis-bench/login", h.CISBenchLogin)
 	protected.POST("/testing/cis-bench/logout", h.CISBenchLogout)
+	protected.GET("/testing/cis-bench/cookies/export", h.CISBenchExportCookies)
 	protected.POST("/testing/cis-bench/catalog/refresh", h.CISBenchRefreshCatalog)
 	protected.POST("/testing/cis-bench/search", h.CISBenchSearch)
 	protected.POST("/testing/cis-bench/download", h.CISBenchDownload)
