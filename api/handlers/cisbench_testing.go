@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/example/cis-benchmark-intelligence/api/models"
 	"github.com/gin-gonic/gin"
 	"github.com/xuri/excelize/v2"
 )
@@ -67,6 +68,11 @@ type cisBenchFile struct {
 	Name       string    `json:"name"`
 	Size       int64     `json:"size"`
 	ModifiedAt time.Time `json:"modified_at"`
+}
+
+type fileSnapshot struct {
+	Size       int64
+	ModifiedAt time.Time
 }
 
 type cookieInputRecord struct {
@@ -817,6 +823,210 @@ func listCISBenchFiles(downloadDir string) ([]cisBenchFile, error) {
 	return files, nil
 }
 
+func snapshotDirectory(downloadDir string) (map[string]fileSnapshot, error) {
+	entries, err := os.ReadDir(downloadDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return map[string]fileSnapshot{}, nil
+		}
+		return nil, err
+	}
+
+	snapshot := make(map[string]fileSnapshot, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		snapshot[entry.Name()] = fileSnapshot{
+			Size:       info.Size(),
+			ModifiedAt: info.ModTime().UTC(),
+		}
+	}
+	return snapshot, nil
+}
+
+func changedFiles(downloadDir string, before map[string]fileSnapshot) ([]string, error) {
+	after, err := snapshotDirectory(downloadDir)
+	if err != nil {
+		return nil, err
+	}
+
+	names := []string{}
+	for name, current := range after {
+		previous, exists := before[name]
+		if !exists || previous.Size != current.Size || !previous.ModifiedAt.Equal(current.ModifiedAt) {
+			names = append(names, name)
+		}
+	}
+	slices.Sort(names)
+
+	paths := make([]string, 0, len(names))
+	for _, name := range names {
+		paths = append(paths, filepath.Join(downloadDir, name))
+	}
+	return paths, nil
+}
+
+func requestedFormatExtensions(formats []string) map[string]struct{} {
+	extensions := map[string]struct{}{}
+	for _, format := range formats {
+		switch strings.ToLower(strings.TrimSpace(format)) {
+		case "xlsx":
+			extensions[".xlsx"] = struct{}{}
+		case "csv":
+			extensions[".csv"] = struct{}{}
+		case "json":
+			extensions[".json"] = struct{}{}
+		case "yaml":
+			extensions[".yaml"] = struct{}{}
+			extensions[".yml"] = struct{}{}
+		case "markdown":
+			extensions[".md"] = struct{}{}
+			extensions[".markdown"] = struct{}{}
+		case "xccdf":
+			extensions[".xml"] = struct{}{}
+			extensions[".xccdf"] = struct{}{}
+		}
+	}
+	return extensions
+}
+
+func copyFileContents(sourcePath, destinationPath string) error {
+	source, err := os.Open(sourcePath)
+	if err != nil {
+		return err
+	}
+	defer source.Close()
+
+	destination, err := os.OpenFile(destinationPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	defer destination.Close()
+
+	if _, err := io.Copy(destination, source); err != nil {
+		return err
+	}
+	return destination.Sync()
+}
+
+func (h *Handler) ingestDownloadedFile(sourcePath string) (map[string]any, error) {
+	ext := strings.ToLower(filepath.Ext(sourcePath))
+	if !allowedUploadTypes[ext] {
+		return nil, fmt.Errorf("unsupported extension for ingestion: %s", ext)
+	}
+
+	sourceInfo, err := os.Stat(sourcePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to stat source file: %w", err)
+	}
+	if sourceInfo.IsDir() {
+		return nil, fmt.Errorf("source path is a directory")
+	}
+
+	if err := os.MkdirAll(h.UploadDir, 0o755); err != nil {
+		return nil, fmt.Errorf("failed to prepare upload directory: %w", err)
+	}
+
+	originalName := filepath.Base(sourcePath)
+	storedName := fmt.Sprintf("%d_%s", time.Now().UnixNano(), originalName)
+	storedPath := filepath.Join(h.UploadDir, storedName)
+	if err := copyFileContents(sourcePath, storedPath); err != nil {
+		return nil, fmt.Errorf("failed to copy downloaded file into upload directory: %w", err)
+	}
+
+	fileHash, err := computeFileSHA256(storedPath)
+	if err != nil {
+		_ = os.Remove(storedPath)
+		return nil, fmt.Errorf("failed to fingerprint imported file: %w", err)
+	}
+
+	frameworkName, nameSimilarity, matchedFramework := h.resolveFrameworkName("", originalName)
+	versionLabel := deriveVersionFromFilename(originalName)
+	if versionLabel == "" {
+		versionLabel = fmt.Sprintf("import-%s", time.Now().Format("20060102150405"))
+	}
+
+	upload := models.UploadedFile{
+		Framework:  frameworkName,
+		Version:    versionLabel,
+		Filename:   originalName,
+		StoredPath: storedPath,
+		FileType:   ext,
+		FileHash:   fileHash,
+	}
+
+	duplicateReplaced := false
+	replacedUploadID := uint(0)
+	duplicateUpload, duplicateFound, err := h.findDuplicateUploadByHash(fileHash)
+	if err != nil {
+		_ = os.Remove(storedPath)
+		return nil, fmt.Errorf("failed to check duplicate uploads: %w", err)
+	}
+	if duplicateFound {
+		previousPath := duplicateUpload.StoredPath
+		duplicateUpload.Framework = frameworkName
+		duplicateUpload.Version = versionLabel
+		duplicateUpload.Filename = originalName
+		duplicateUpload.StoredPath = storedPath
+		duplicateUpload.FileType = ext
+		duplicateUpload.FileHash = fileHash
+		duplicateUpload.CreatedAt = time.Now().UTC()
+
+		if err := h.DB.Save(&duplicateUpload).Error; err != nil {
+			_ = os.Remove(storedPath)
+			return nil, fmt.Errorf("failed to replace duplicate upload metadata: %w", err)
+		}
+
+		if strings.TrimSpace(previousPath) != "" && previousPath != storedPath {
+			_ = os.Remove(previousPath)
+		}
+
+		upload = duplicateUpload
+		duplicateReplaced = true
+		replacedUploadID = duplicateUpload.ID
+	} else {
+		if err := h.DB.Create(&upload).Error; err != nil {
+			_ = os.Remove(storedPath)
+			return nil, fmt.Errorf("failed to persist upload metadata: %w", err)
+		}
+	}
+
+	frameworkID, versionID, err := h.ensureFrameworkAndVersion(frameworkName, versionLabel, storedPath, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to persist framework/version metadata: %w", err)
+	}
+
+	jobPayload := gin.H{
+		"upload_id":  upload.ID,
+		"framework":  frameworkName,
+		"version":    versionLabel,
+		"version_id": versionID,
+	}
+	payload, _ := json.Marshal(jobPayload)
+	if err := h.Redis.RPush(context.Background(), "parse_jobs", payload).Err(); err != nil {
+		return nil, fmt.Errorf("imported file but failed to enqueue parse job: %w", err)
+	}
+
+	return map[string]any{
+		"upload_id":          upload.ID,
+		"framework_id":       frameworkID,
+		"version_id":         versionID,
+		"framework":          frameworkName,
+		"version":            versionLabel,
+		"filename":           originalName,
+		"file_type":          ext,
+		"name_similarity":    nameSimilarity,
+		"matched_framework":  matchedFramework,
+		"duplicate_replaced": duplicateReplaced,
+		"replaced_upload_id": replacedUploadID,
+	}, nil
+}
+
 func uniqueNormalizedFormats(formats []string) []string {
 	seen := map[string]struct{}{}
 	normalized := make([]string, 0, len(formats))
@@ -992,6 +1202,11 @@ func (h *Handler) CISBenchDownload(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create cis-bench download directory"})
 		return
 	}
+	beforeSnapshot, err := snapshotDirectory(downloadDir)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to inspect download directory before download"})
+		return
+	}
 
 	args := []string{"download", benchmarkID, "--output-dir", downloadDir}
 	for _, format := range cisBenchFormats {
@@ -1021,6 +1236,33 @@ func (h *Handler) CISBenchDownload(c *gin.Context) {
 		generatedXLSX, warnings = generateXLSXFromCSVs(downloadDir, startedAt)
 	}
 
+	modifiedPaths, changedErr := changedFiles(downloadDir, beforeSnapshot)
+	if changedErr != nil {
+		warnings = append(warnings, fmt.Sprintf("failed to detect changed files for ingestion: %v", changedErr))
+		modifiedPaths = []string{}
+	}
+
+	allowedExtensions := requestedFormatExtensions(requestedFormats)
+	importedUploads := []map[string]any{}
+	importedCount := 0
+	for _, path := range modifiedPaths {
+		ext := strings.ToLower(filepath.Ext(path))
+		if _, selected := allowedExtensions[ext]; !selected {
+			continue
+		}
+		if !allowedUploadTypes[ext] {
+			warnings = append(warnings, fmt.Sprintf("skipped platform ingestion for %s: unsupported upload type", filepath.Base(path)))
+			continue
+		}
+		importResult, importErr := h.ingestDownloadedFile(path)
+		if importErr != nil {
+			warnings = append(warnings, fmt.Sprintf("failed to ingest %s: %v", filepath.Base(path), importErr))
+			continue
+		}
+		importedUploads = append(importedUploads, importResult)
+		importedCount++
+	}
+
 	files, listErr := listCISBenchFiles(downloadDir)
 	if listErr != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "download succeeded but failed to list files"})
@@ -1028,15 +1270,17 @@ func (h *Handler) CISBenchDownload(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message":        "download complete",
-		"benchmark_id":   benchmarkID,
-		"formats":        requestedFormats,
-		"source_formats": cisBenchFormats,
-		"generated_xlsx": generatedXLSX,
-		"warnings":       warnings,
-		"stdout":         stdout,
-		"stderr":         stderr,
-		"files":          files,
+		"message":          "download complete",
+		"benchmark_id":     benchmarkID,
+		"formats":          requestedFormats,
+		"source_formats":   cisBenchFormats,
+		"generated_xlsx":   generatedXLSX,
+		"warnings":         warnings,
+		"ingested_count":   importedCount,
+		"ingested_uploads": importedUploads,
+		"stdout":           stdout,
+		"stderr":           stderr,
+		"files":            files,
 	})
 }
 
