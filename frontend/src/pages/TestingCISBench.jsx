@@ -45,7 +45,12 @@ export default function TestingCISBench({ apiBase }) {
   const [downloadBenchmarkId, setDownloadBenchmarkId] = useState("");
   const [downloadFormats, setDownloadFormats] = useState(["xlsx"]);
   const [files, setFiles] = useState([]);
-  const [downloadProgress, setDownloadProgress] = useState({ active: false, value: 0, label: "" });
+  const [downloadProgress, setDownloadProgress] = useState({
+    active: false,
+    value: 0,
+    label: "",
+    phase: "idle",
+  });
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -125,15 +130,18 @@ export default function TestingCISBench({ apiBase }) {
     if (progressCompletionRef.current) {
       clearTimeout(progressCompletionRef.current);
     }
-    setDownloadProgress({ active: true, value: 6, label });
+    setDownloadProgress({ active: true, value: 6, label, phase: "downloading" });
     progressIntervalRef.current = setInterval(() => {
       setDownloadProgress((current) => {
         if (!current.active) {
           return current;
         }
-        const increment = Math.max(1, Math.round((100 - current.value) * 0.12));
-        const nextValue = Math.min(92, current.value + increment);
-        return { ...current, value: nextValue };
+        if (current.value >= 90) {
+          return { ...current, phase: "finalizing" };
+        }
+        const increment = Math.max(1, Math.round((100 - current.value) * 0.08));
+        const nextValue = Math.min(90, current.value + increment);
+        return { ...current, value: nextValue, phase: "downloading" };
       });
     }, 700);
   };
@@ -143,9 +151,9 @@ export default function TestingCISBench({ apiBase }) {
       clearInterval(progressIntervalRef.current);
       progressIntervalRef.current = null;
     }
-    setDownloadProgress((current) => ({ ...current, value: 100 }));
+    setDownloadProgress((current) => ({ ...current, value: 100, phase: "complete" }));
     progressCompletionRef.current = setTimeout(() => {
-      setDownloadProgress({ active: false, value: 0, label: "" });
+      setDownloadProgress({ active: false, value: 0, label: "", phase: "idle" });
       progressCompletionRef.current = null;
     }, 500);
   };
@@ -543,8 +551,13 @@ export default function TestingCISBench({ apiBase }) {
           <Typography variant="subtitle1">Downloaded Files</Typography>
           {downloadProgress.active && (
             <Stack spacing={0.5}>
-              <Typography variant="body2">{downloadProgress.label}</Typography>
-              <LinearProgress variant="determinate" value={downloadProgress.value} />
+              <Typography variant="body2">
+                {downloadProgress.phase === "finalizing" ? `${downloadProgress.label} (finalizing...)` : downloadProgress.label}
+              </Typography>
+              <LinearProgress
+                variant={downloadProgress.phase === "finalizing" ? "indeterminate" : "determinate"}
+                value={downloadProgress.value}
+              />
             </Stack>
           )}
           <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
