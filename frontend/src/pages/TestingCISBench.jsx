@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import {
   Alert,
@@ -7,6 +7,7 @@ import {
   Chip,
   Collapse,
   FormControlLabel,
+  LinearProgress,
   Paper,
   Stack,
   Table,
@@ -44,9 +45,12 @@ export default function TestingCISBench({ apiBase }) {
   const [downloadBenchmarkId, setDownloadBenchmarkId] = useState("");
   const [downloadFormats, setDownloadFormats] = useState(["xlsx"]);
   const [files, setFiles] = useState([]);
+  const [downloadProgress, setDownloadProgress] = useState({ active: false, value: 0, label: "" });
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const progressIntervalRef = useRef(null);
+  const progressCompletionRef = useRef(null);
 
   const extractApiError = (requestError, fallback) => {
     const data = requestError?.response?.data;
@@ -82,9 +86,68 @@ export default function TestingCISBench({ apiBase }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiBase]);
 
+  useEffect(
+    () => () => {
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+      }
+      if (progressCompletionRef.current) {
+        clearTimeout(progressCompletionRef.current);
+      }
+    },
+    []
+  );
+
   const clearMessages = () => {
     setMessage("");
     setError("");
+  };
+
+  const formatFileSize = (bytes) => {
+    const value = Number(bytes || 0);
+    if (value < 1024) {
+      return `${value} B`;
+    }
+    const units = ["KB", "MB", "GB", "TB"];
+    let size = value / 1024;
+    let index = 0;
+    while (size >= 1024 && index < units.length - 1) {
+      size /= 1024;
+      index += 1;
+    }
+    return `${size.toFixed(size >= 10 ? 1 : 2)} ${units[index]}`;
+  };
+
+  const startDownloadProgress = (label) => {
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+    }
+    if (progressCompletionRef.current) {
+      clearTimeout(progressCompletionRef.current);
+    }
+    setDownloadProgress({ active: true, value: 6, label });
+    progressIntervalRef.current = setInterval(() => {
+      setDownloadProgress((current) => {
+        if (!current.active) {
+          return current;
+        }
+        const increment = Math.max(1, Math.round((100 - current.value) * 0.12));
+        const nextValue = Math.min(92, current.value + increment);
+        return { ...current, value: nextValue };
+      });
+    }, 700);
+  };
+
+  const finishDownloadProgress = () => {
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
+    }
+    setDownloadProgress((current) => ({ ...current, value: 100 }));
+    progressCompletionRef.current = setTimeout(() => {
+      setDownloadProgress({ active: false, value: 0, label: "" });
+      progressCompletionRef.current = null;
+    }, 500);
   };
 
   const loginWithCookiesInput = async (cookieInput, successMessage = "Logged in to cis-bench.") => {
@@ -244,6 +307,7 @@ export default function TestingCISBench({ apiBase }) {
     }
 
     setBusy(true);
+    startDownloadProgress(`Downloading benchmark ${benchmark_id}`);
     try {
       const response = await axios.post(`${apiBase}/testing/cis-bench/download`, {
         benchmark_id,
@@ -254,6 +318,43 @@ export default function TestingCISBench({ apiBase }) {
       await loadFiles();
     } catch (downloadError) {
       setError(extractApiError(downloadError, "Download failed."));
+    } finally {
+      finishDownloadProgress();
+      setBusy(false);
+    }
+  };
+
+  const deleteDownload = async (name) => {
+    clearMessages();
+    if (!window.confirm(`Delete ${name}?`)) {
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const response = await axios.delete(`${apiBase}/testing/cis-bench/files/${encodeURIComponent(name)}`);
+      setMessage(response.data?.message || `Deleted ${name}.`);
+      await loadFiles();
+    } catch (deleteError) {
+      setError(extractApiError(deleteError, "Failed to delete file."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteAllDownloads = async () => {
+    clearMessages();
+    if (!window.confirm("Delete all downloaded benchmark files?")) {
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const response = await axios.delete(`${apiBase}/testing/cis-bench/files`, { params: { all: true } });
+      setMessage(response.data?.message || "Deleted downloaded files.");
+      await loadFiles();
+    } catch (deleteError) {
+      setError(extractApiError(deleteError, "Failed to delete downloaded files."));
     } finally {
       setBusy(false);
     }
@@ -440,6 +541,12 @@ export default function TestingCISBench({ apiBase }) {
       <Paper sx={{ p: 2 }}>
         <Stack spacing={2}>
           <Typography variant="subtitle1">Downloaded Files</Typography>
+          {downloadProgress.active && (
+            <Stack spacing={0.5}>
+              <Typography variant="body2">{downloadProgress.label}</Typography>
+              <LinearProgress variant="determinate" value={downloadProgress.value} />
+            </Stack>
+          )}
           <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
             <TextField
               label="Benchmark ID"
@@ -453,6 +560,9 @@ export default function TestingCISBench({ apiBase }) {
             <Button variant="outlined" onClick={loadFiles} disabled={busy}>
               Refresh Files
             </Button>
+            <Button variant="outlined" color="error" onClick={deleteAllDownloads} disabled={busy || files.length === 0}>
+              Delete All
+            </Button>
           </Stack>
 
           <Table size="small">
@@ -461,24 +571,29 @@ export default function TestingCISBench({ apiBase }) {
                 <TableCell>Name</TableCell>
                 <TableCell>Size</TableCell>
                 <TableCell>Modified</TableCell>
-                <TableCell>Download</TableCell>
+                <TableCell>Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {files.map((file) => (
                 <TableRow key={file.name}>
                   <TableCell>{file.name}</TableCell>
-                  <TableCell>{file.size}</TableCell>
+                  <TableCell>{formatFileSize(file.size)}</TableCell>
                   <TableCell>{new Date(file.modified_at).toLocaleString()}</TableCell>
                   <TableCell>
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      component="a"
-                      href={`${apiBase}/testing/cis-bench/files/${encodeURIComponent(file.name)}/download`}
-                    >
-                      Download
-                    </Button>
+                    <Stack direction="row" spacing={1}>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        component="a"
+                        href={`${apiBase}/testing/cis-bench/files/${encodeURIComponent(file.name)}/download`}
+                      >
+                        Download
+                      </Button>
+                      <Button size="small" variant="outlined" color="error" onClick={() => deleteDownload(file.name)} disabled={busy}>
+                        Delete
+                      </Button>
+                    </Stack>
                   </TableCell>
                 </TableRow>
               ))}

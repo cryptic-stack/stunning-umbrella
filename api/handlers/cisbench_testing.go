@@ -1297,38 +1297,45 @@ func (h *Handler) CISBenchListFiles(c *gin.Context) {
 	c.JSON(http.StatusOK, files)
 }
 
-func (h *Handler) CISBenchDownloadFile(c *gin.Context) {
-	if !h.ensureCISBenchEnabled(c) {
-		return
-	}
-
-	requested := strings.TrimSpace(c.Param("name"))
+func resolveCISBenchFilePath(requestedName string) (string, string, error) {
+	requested := strings.TrimSpace(requestedName)
 	if requested == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "file name is required"})
-		return
+		return "", "", fmt.Errorf("file name is required")
 	}
 
 	safeName := filepath.Base(requested)
 	if safeName != requested {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid file name"})
-		return
+		return "", "", fmt.Errorf("invalid file name")
 	}
 
 	downloadDir := cisBenchDownloadDir()
 	absDir, err := filepath.Abs(downloadDir)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to resolve download directory"})
-		return
+		return "", "", fmt.Errorf("failed to resolve download directory")
 	}
+
 	path := filepath.Join(absDir, safeName)
 	absPath, err := filepath.Abs(path)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to resolve download path"})
-		return
+		return "", "", fmt.Errorf("failed to resolve download path")
 	}
+
 	rel, err := filepath.Rel(absDir, absPath)
 	if err != nil || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid file path"})
+		return "", "", fmt.Errorf("invalid file path")
+	}
+
+	return safeName, absPath, nil
+}
+
+func (h *Handler) CISBenchDownloadFile(c *gin.Context) {
+	if !h.ensureCISBenchEnabled(c) {
+		return
+	}
+
+	safeName, absPath, err := resolveCISBenchFilePath(c.Param("name"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	if _, err := os.Stat(absPath); err != nil {
@@ -1337,4 +1344,84 @@ func (h *Handler) CISBenchDownloadFile(c *gin.Context) {
 	}
 
 	c.FileAttachment(absPath, safeName)
+}
+
+func (h *Handler) CISBenchDeleteFile(c *gin.Context) {
+	if !h.ensureCISBenchEnabled(c) {
+		return
+	}
+
+	safeName, absPath, err := resolveCISBenchFilePath(c.Param("name"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := os.Remove(absPath); err != nil {
+		if os.IsNotExist(err) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete file"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "file deleted",
+		"name":    safeName,
+	})
+}
+
+func (h *Handler) CISBenchDeleteFiles(c *gin.Context) {
+	if !h.ensureCISBenchEnabled(c) {
+		return
+	}
+
+	all := strings.EqualFold(c.Query("all"), "true") || c.Query("all") == "1"
+	if !all {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "set all=true to delete all downloaded files"})
+		return
+	}
+
+	downloadDir := cisBenchDownloadDir()
+	entries, err := os.ReadDir(downloadDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			c.JSON(http.StatusOK, gin.H{
+				"message": "no files to delete",
+				"deleted": 0,
+			})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list download directory"})
+		return
+	}
+
+	deleted := []string{}
+	warnings := []string{}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+
+		safeName, absPath, resolveErr := resolveCISBenchFilePath(entry.Name())
+		if resolveErr != nil {
+			warnings = append(warnings, fmt.Sprintf("skipped %s: %v", entry.Name(), resolveErr))
+			continue
+		}
+		if removeErr := os.Remove(absPath); removeErr != nil {
+			if !os.IsNotExist(removeErr) {
+				warnings = append(warnings, fmt.Sprintf("failed to delete %s: %v", safeName, removeErr))
+			}
+			continue
+		}
+		deleted = append(deleted, safeName)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":  "deleted downloaded files",
+		"deleted":  len(deleted),
+		"files":    deleted,
+		"warnings": warnings,
+	})
 }

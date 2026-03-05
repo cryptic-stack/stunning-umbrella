@@ -42,5 +42,7 @@ func RegisterRoutes(r *gin.Engine, h *handlers.Handler, authMiddleware gin.Handl
 	protected.POST("/testing/cis-bench/search", h.CISBenchSearch)
 	protected.POST("/testing/cis-bench/download", h.CISBenchDownload)
 	protected.GET("/testing/cis-bench/files", h.CISBenchListFiles)
+	protected.DELETE("/testing/cis-bench/files", h.CISBenchDeleteFiles)
+	protected.DELETE("/testing/cis-bench/files/:name", h.CISBenchDeleteFile)
 	protected.GET("/testing/cis-bench/files/:name/download", h.CISBenchDownloadFile)
 }
