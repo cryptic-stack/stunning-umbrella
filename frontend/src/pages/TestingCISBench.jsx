@@ -28,10 +28,6 @@ const defaultSearch = {
 
 const downloadFormatOptions = [
   { id: "csv", label: "CSV" },
-  { id: "json", label: "JSON" },
-  { id: "yaml", label: "YAML" },
-  { id: "markdown", label: "Markdown" },
-  { id: "xccdf", label: "XCCDF" },
 ];
 
 export default function TestingCISBench({ apiBase }) {

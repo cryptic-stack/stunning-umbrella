@@ -185,6 +185,12 @@ def process_job(payload: dict) -> dict:
     safe_path = resolve_allowed_upload_path(path)
 
     records = normalize_file(safe_path, framework, version)
+    if version_id:
+        # When upload metadata already resolved to a specific version_id,
+        # keep parsed rows anchored to that framework/version context.
+        for record in records:
+            record.framework = framework
+            record.version = version
     inserted = upsert_records(records, safe_path, provided_version_id=version_id)
     return {"inserted": inserted, "records": len(records)}
 

@@ -24,7 +24,7 @@ import (
 )
 
 var (
-	validCISBenchFormats = []string{"xlsx", "json", "yaml", "csv", "markdown", "xccdf"}
+	validCISBenchFormats = []string{"csv"}
 	benchmarkIDPattern   = regexp.MustCompile(`^\d+$`)
 	fileTokenPattern     = regexp.MustCompile(`[^A-Za-z0-9]+`)
 )

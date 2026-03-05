@@ -58,3 +58,28 @@ def test_parse_benchmark_style_rows_with_levels(tmp_path):
     assert records[0].control_id == "1.1"
     assert records[0].level == "L1"
     assert records[1].level == "L2"
+
+
+def test_parse_cis_bench_csv_rows(tmp_path):
+    path = tmp_path / "cis_bench.csv"
+    pd.DataFrame(
+        [
+            {
+                "benchmark_title": "CIS Microsoft Windows Server 2019 Benchmark v1.3.0",
+                "benchmark_version": "v1.3.0",
+                "ref": "1.1.1",
+                "title": "(L1) Ensure test setting is configured",
+                "profiles": "Level 1 - Member Server",
+                "description": "",
+                "rationale": "",
+            }
+        ]
+    ).to_csv(path, index=False)
+
+    records = parse_excel(str(path), framework="fallback framework", version="fallback version")
+    assert len(records) == 1
+    assert records[0].framework == "CIS Microsoft Windows Server 2019 Benchmark v1.3.0"
+    assert records[0].version == "v1.3.0"
+    assert records[0].safeguard_id == "1.1.1"
+    assert records[0].control_id == "1.1"
+    assert records[0].level == "L1"
