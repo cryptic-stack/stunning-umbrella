@@ -52,7 +52,7 @@ func (h *Handler) ensureOrgSettings() (models.OrgSetting, error) {
 	if err != gorm.ErrRecordNotFound {
 		return setting, err
 	}
-	setting = models.OrgSetting{OrgName: "CIS Benchmark Intelligence"}
+	setting = models.OrgSetting{}
 	if createErr := h.DB.Create(&setting).Error; createErr != nil {
 		return models.OrgSetting{}, createErr
 	}
@@ -86,10 +86,6 @@ func (h *Handler) UpdateOrgBranding(c *gin.Context) {
 	setting.PrimaryColor = strings.TrimSpace(req.PrimaryColor)
 	setting.SecondaryColor = strings.TrimSpace(req.SecondaryColor)
 	setting.SupportEmail = strings.TrimSpace(req.SupportEmail)
-
-	if setting.OrgName == "" {
-		setting.OrgName = "CIS Benchmark Intelligence"
-	}
 
 	if err := h.DB.Save(&setting).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save org branding settings"})

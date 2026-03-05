@@ -4,7 +4,7 @@
 
 1. User uploads benchmark file in UI (`frontend`).
 2. Go API stores file under `/data/uploads` and inserts metadata.
-3. API enqueues parsing message to Redis `parse_jobs`.
+3. API enqueues parsing message to Redis `parse_jobs` (references `upload_id`; parser resolves file path from database).
 4. Python parser worker normalizes benchmark controls/safeguards and writes canonical records to PostgreSQL.
 5. User requests compare between versions.
 6. API inserts `diff_reports` row and pushes job to Redis `diff_jobs`.

@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS app_users (
 CREATE INDEX IF NOT EXISTS idx_app_users_role_id ON app_users(role_id);
 
 INSERT INTO org_settings (org_name)
-SELECT 'CIS Benchmark Intelligence'
+SELECT ''
 WHERE NOT EXISTS (SELECT 1 FROM org_settings);
 
 INSERT INTO roles (name, description, is_system) VALUES

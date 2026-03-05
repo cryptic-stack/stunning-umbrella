@@ -22,8 +22,9 @@ Services:
 - API: `http://localhost:8080`
 - Frontend (HTTP): `http://localhost` (port 80)
 - Frontend (alt port): `http://localhost:443`
-- Postgres: `localhost:5432`
-- Redis: `localhost:6379`
+
+Runtime data (uploads, exports, database state) is stored in Docker named volumes, not in repository directories.
+Postgres and Redis are internal-only service endpoints on the Docker network and are not published to the host.
 
 ## Core API Endpoints
 

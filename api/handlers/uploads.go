@@ -24,7 +24,6 @@ type uploadView struct {
 	Framework          string  `json:"framework"`
 	Version            string  `json:"version"`
 	Filename           string  `json:"filename"`
-	StoredPath         string  `json:"stored_path"`
 	FileType           string  `json:"file_type"`
 	CreatedAt          string  `json:"created_at"`
 	SuggestedFramework string  `json:"suggested_framework"`
@@ -53,7 +52,6 @@ func (h *Handler) ListUploads(c *gin.Context) {
 			Framework:          upload.Framework,
 			Version:            upload.Version,
 			Filename:           upload.Filename,
-			StoredPath:         upload.StoredPath,
 			FileType:           upload.FileType,
 			CreatedAt:          upload.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 			SuggestedFramework: suggestedFramework,
@@ -118,7 +116,7 @@ func (h *Handler) TagUpload(c *gin.Context) {
 	}
 
 	jobPayload := gin.H{
-		"file_path":  upload.StoredPath,
+		"upload_id":  upload.ID,
 		"framework":  framework,
 		"version":    version,
 		"version_id": versionID,
@@ -131,7 +129,12 @@ func (h *Handler) TagUpload(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":           "upload tagged",
-		"upload":            upload,
+		"upload_id":         upload.ID,
+		"framework":         upload.Framework,
+		"version":           upload.Version,
+		"filename":          upload.Filename,
+		"file_type":         upload.FileType,
+		"created_at":        upload.CreatedAt,
 		"framework_id":      frameworkID,
 		"version_id":        versionID,
 		"name_similarity":   similarity,

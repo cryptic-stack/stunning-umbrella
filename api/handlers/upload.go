@@ -137,6 +137,11 @@ func (h *Handler) UploadFile(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save file"})
 		return
 	}
+	if err := os.Chmod(storedPath, 0o600); err != nil {
+		_ = os.Remove(storedPath)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to secure uploaded file"})
+		return
+	}
 
 	fileHash, err := computeFileSHA256(storedPath)
 	if err != nil {
@@ -214,7 +219,7 @@ func (h *Handler) UploadFile(c *gin.Context) {
 	}
 
 	jobPayload := gin.H{
-		"file_path":  storedPath,
+		"upload_id":  upload.ID,
 		"framework":  frameworkName,
 		"version":    versionLabel,
 		"version_id": versionID,
@@ -228,7 +233,6 @@ func (h *Handler) UploadFile(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{
 		"message":            "file uploaded",
 		"upload_id":          upload.ID,
-		"path":               storedPath,
 		"framework_id":       frameworkID,
 		"version_id":         versionID,
 		"framework":          frameworkName,

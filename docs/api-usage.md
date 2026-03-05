@@ -39,6 +39,7 @@ against existing framework names. If similarity is `>= 95%`, it reuses the exist
 ### `GET /uploads`
 
 Returns recent uploaded benchmark files with current framework/version tags.
+Internal storage paths are not returned.
 
 ### `PUT /uploads/{id}/tag`
 
@@ -156,11 +157,11 @@ Upserts org branding settings.
 
 ```json
 {
-  "org_name": "Acme Security",
-  "logo_url": "https://example.com/logo.png",
-  "primary_color": "#0b7285",
-  "secondary_color": "#f59f00",
-  "support_email": "security@example.com"
+  "org_name": "",
+  "logo_url": "",
+  "primary_color": "",
+  "secondary_color": "",
+  "support_email": ""
 }
 ```
 

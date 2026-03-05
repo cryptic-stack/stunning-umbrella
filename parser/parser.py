@@ -43,6 +43,36 @@ def normalize_file(path: str, framework: str, version: str) -> List[CanonicalSaf
     raise ValueError(f"Unsupported extension: {ext}")
 
 
+def resolve_allowed_upload_path(path: str) -> str:
+    upload_root = Path(os.getenv("UPLOAD_DIR", "/data/uploads")).resolve()
+    resolved_path = Path(path).resolve()
+
+    if not resolved_path.is_file():
+        raise ValueError("uploaded file not found")
+    if not resolved_path.is_relative_to(upload_root):
+        raise ValueError("job file path is outside upload directory")
+
+    return str(resolved_path)
+
+
+def get_upload_context(upload_id: int) -> tuple[str, str, str]:
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT stored_path, framework, version
+                FROM uploaded_files
+                WHERE id = %s
+                """,
+                (upload_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                raise ValueError("upload record not found")
+            stored_path, framework, version = row
+            return str(stored_path or ""), str(framework or ""), str(version or "")
+
+
 def ensure_framework_version(cur, framework: str, version: str, source_file: str) -> tuple[int, int]:
     cur.execute(
         """
@@ -138,11 +168,24 @@ def upsert_records(records: Iterable[CanonicalSafeguard], source_file: str, prov
 def process_job(payload: dict) -> dict:
     framework = payload.get("framework") or "CIS Controls"
     version = payload.get("version") or "unknown"
-    path = payload["file_path"]
     version_id = payload.get("version_id")
+    upload_id = payload.get("upload_id")
 
-    records = normalize_file(path, framework, version)
-    inserted = upsert_records(records, path, provided_version_id=version_id)
+    path = payload.get("file_path")
+    if upload_id:
+        stored_path, stored_framework, stored_version = get_upload_context(int(upload_id))
+        path = stored_path
+        if stored_framework:
+            framework = stored_framework
+        if stored_version:
+            version = stored_version
+    if not path:
+        raise ValueError("job is missing upload path")
+
+    safe_path = resolve_allowed_upload_path(path)
+
+    records = normalize_file(safe_path, framework, version)
+    inserted = upsert_records(records, safe_path, provided_version_id=version_id)
     return {"inserted": inserted, "records": len(records)}
 
 

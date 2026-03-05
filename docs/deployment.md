@@ -18,9 +18,14 @@ docker compose up --build
 
 ## Data Volumes
 
-- Uploaded files: `./data/uploads`
-- Collected downloads: `./data/downloads`
-- Postgres data: `./storage/postgres`
+- Uploaded files, downloads, and exports are stored in Docker volume `app_data`.
+- Postgres data is stored in Docker volume `postgres_data`.
+- No runtime benchmark/report database files are written into the repository by default.
+
+## Network Exposure
+
+- API and frontend ports are bound to `127.0.0.1` only.
+- Postgres and Redis are not published to the host and are reachable only from other containers in the same compose project.
 
 ## Optional Collector
 
