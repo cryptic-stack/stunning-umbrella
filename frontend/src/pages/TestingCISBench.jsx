@@ -25,6 +25,7 @@ const defaultSearch = {
 };
 
 export default function TestingCISBench({ apiBase }) {
+  const browserExtractionSupported = false;
   const [status, setStatus] = useState({ logged_in: false });
   const [cookiesText, setCookiesText] = useState("");
   const [browser, setBrowser] = useState("chrome");
@@ -238,6 +239,9 @@ export default function TestingCISBench({ apiBase }) {
           <Typography variant="body2">
             Workflow: 1) Open CIS login page, 2) sign in, 3) export cookies from your browser, 4) paste them here and click Use Pasted Cookies.
           </Typography>
+          <Typography variant="body2" color="warning.main">
+            Browser cookie extraction from inside the API container is not supported in this deployment. Use exported cookies from your host browser.
+          </Typography>
           <Typography variant="body2">
             Supported cookie input formats: Netscape cookie text, JSON cookie export, or raw "Cookie: name=value; ..." header.
           </Typography>
@@ -269,8 +273,13 @@ export default function TestingCISBench({ apiBase }) {
             <Button variant="outlined" onClick={openWorkbenchLogin} disabled={busy}>
               Open CIS Login Page
             </Button>
-            <Button variant="contained" onClick={loginWithBrowser} disabled={busy}>
-              Generate Cookie Session
+            <Button
+              variant="contained"
+              onClick={loginWithBrowser}
+              disabled={busy || !browserExtractionSupported}
+              title="Disabled: API runs in container and cannot read host browser profile/cookies."
+            >
+              Generate Cookie Session (Unsupported Here)
             </Button>
             <Button variant="outlined" onClick={exportSavedCookies} disabled={busy}>
               Export Saved Cookies
