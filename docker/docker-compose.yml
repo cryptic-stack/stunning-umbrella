@@ -9,6 +9,8 @@ services:
       REDIS_ADDR: redis:6379
       UPLOAD_DIR: /data/uploads
       EXPORT_DIR: /data/exports
+      CIS_BENCH_TESTING_ENABLED: "true"
+      CIS_BENCH_DOWNLOAD_DIR: /data/downloads/cis-bench
       FRONTEND_URL: http://localhost
     ports:
       - "127.0.0.1:8080:8080"

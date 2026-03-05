@@ -5,6 +5,7 @@ import UploadBenchmarks from "./pages/UploadBenchmarks";
 import VersionComparison from "./pages/VersionComparison";
 import DiffViewer from "./pages/DiffViewer";
 import Settings from "./pages/Settings";
+import TestingCISBench from "./pages/TestingCISBench";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
 const appTheme = createTheme({
@@ -23,6 +24,7 @@ export default function App() {
       <VersionComparison key="compare" apiBase={API_BASE} onReportCreated={setReportId} />,
       <DiffViewer key="diff" apiBase={API_BASE} reportId={reportId} onReportIdChange={setReportId} />,
       <Settings key="settings" apiBase={API_BASE} />,
+      <TestingCISBench key="testing-cis-bench" apiBase={API_BASE} />,
     ],
     [reportId]
   );
@@ -44,6 +46,7 @@ export default function App() {
             <Tab label="Version Comparison" />
             <Tab label="Diff Viewer" />
             <Tab label="Settings" />
+            <Tab label="Testing" />
           </Tabs>
         </Box>
         {views[tab]}
