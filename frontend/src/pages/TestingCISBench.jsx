@@ -4,8 +4,9 @@ import {
   Alert,
   Button,
   Checkbox,
+  Chip,
+  Collapse,
   FormControlLabel,
-  MenuItem,
   Paper,
   Stack,
   Table,
@@ -25,10 +26,9 @@ const defaultSearch = {
 };
 
 export default function TestingCISBench({ apiBase }) {
-  const browserExtractionSupported = false;
   const [status, setStatus] = useState({ logged_in: false });
   const [cookiesText, setCookiesText] = useState("");
-  const [browser, setBrowser] = useState("chrome");
+  const [manualCookieEditorOpen, setManualCookieEditorOpen] = useState(false);
   const [noVerifySSL, setNoVerifySSL] = useState(true);
   const [searchReq, setSearchReq] = useState(defaultSearch);
   const [searchResults, setSearchResults] = useState([]);
@@ -77,26 +77,70 @@ export default function TestingCISBench({ apiBase }) {
     setError("");
   };
 
-  const loginWithBrowser = async () => {
+  const loginWithCookiesInput = async (cookieInput, successMessage = "Logged in to cis-bench.") => {
     clearMessages();
+    const cookiePayload = String(cookieInput || "").trim();
+    if (!cookiePayload) {
+      setError("Cookie input is empty.");
+      return;
+    }
+
     setBusy(true);
     try {
       const response = await axios.post(`${apiBase}/testing/cis-bench/login`, {
-        mode: "browser",
-        browser,
+        mode: "cookies",
+        cookies_text: cookiePayload,
         no_verify_ssl: noVerifySSL,
       });
-      setMessage(response.data?.message || "Generated session cookie from browser.");
+      setMessage(response.data?.message || successMessage);
       await loadStatus();
     } catch (loginError) {
-      setError(
-        extractApiError(
-          loginError,
-          "Failed to generate cookie session from browser. In Docker, use exported/pasted cookies from your host browser."
-        )
-      );
+      setError(extractApiError(loginError, "cis-bench login failed."));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const loginWithCookies = async () => {
+    await loginWithCookiesInput(cookiesText, "Connected using pasted cookies.");
+  };
+
+  const pasteFromClipboardAndConnect = async () => {
+    clearMessages();
+    if (!navigator?.clipboard?.readText) {
+      setError("Clipboard access is not available in this browser. Paste manually in the editor.");
+      return;
+    }
+
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text || !text.trim()) {
+        setError("Clipboard is empty.");
+        return;
+      }
+      setCookiesText(text);
+      setManualCookieEditorOpen(true);
+      await loginWithCookiesInput(text, "Connected using cookies from clipboard.");
+    } catch {
+      setError("Failed to read clipboard. Paste manually in the editor.");
+    }
+  };
+
+  const importCookieFileAndConnect = async (event) => {
+    const selected = event.target.files?.[0];
+    event.target.value = "";
+    if (!selected) {
+      return;
+    }
+
+    clearMessages();
+    try {
+      const text = await selected.text();
+      setCookiesText(text);
+      setManualCookieEditorOpen(true);
+      await loginWithCookiesInput(text, `Connected using cookie file: ${selected.name}`);
+    } catch {
+      setError(`Failed to read cookie file: ${selected.name}`);
     }
   };
 
@@ -107,9 +151,10 @@ export default function TestingCISBench({ apiBase }) {
       const response = await axios.get(`${apiBase}/testing/cis-bench/cookies/export`);
       const cookieText = response.data?.cookies_text || "";
       setCookiesText(cookieText);
-      setMessage(cookieText ? "Exported saved session cookies into the editor." : "No cookie content found.");
+      setManualCookieEditorOpen(true);
+      setMessage(cookieText ? "Loaded saved cookies into editor." : "No saved cookie content found.");
     } catch (exportError) {
-      setError(exportError?.response?.data?.error || "Failed to export saved cookies.");
+      setError(extractApiError(exportError, "Failed to load saved cookies."));
     } finally {
       setBusy(false);
     }
@@ -135,29 +180,6 @@ export default function TestingCISBench({ apiBase }) {
     setError("");
   };
 
-  const loginWithCookies = async () => {
-    clearMessages();
-    if (!cookiesText.trim()) {
-      setError("Paste Netscape cookie content first.");
-      return;
-    }
-
-    setBusy(true);
-    try {
-      const response = await axios.post(`${apiBase}/testing/cis-bench/login`, {
-        mode: "cookies",
-        cookies_text: cookiesText,
-        no_verify_ssl: noVerifySSL,
-      });
-      setMessage(response.data?.message || "Logged in to cis-bench.");
-      await loadStatus();
-    } catch (loginError) {
-      setError(extractApiError(loginError, "cis-bench login failed."));
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const logout = async () => {
     clearMessages();
     setBusy(true);
@@ -177,7 +199,7 @@ export default function TestingCISBench({ apiBase }) {
     setBusy(true);
     try {
       const response = await axios.post(`${apiBase}/testing/cis-bench/catalog/refresh`, {
-        browser,
+        browser: "chrome",
         no_verify_ssl: noVerifySSL,
       });
       setMessage(response.data?.message || "Catalog refresh complete.");
@@ -235,73 +257,73 @@ export default function TestingCISBench({ apiBase }) {
 
       <Paper sx={{ p: 2 }}>
         <Stack spacing={2}>
-          <Typography variant="subtitle1">Login</Typography>
+          <Stack direction="row" justifyContent="space-between" alignItems="center">
+            <Typography variant="subtitle1">Connect CIS WorkBench</Typography>
+            <Chip label={status.logged_in ? "Connected" : "Not Connected"} color={status.logged_in ? "success" : "default"} size="small" />
+          </Stack>
           <Typography variant="body2">
-            Workflow: 1) Open CIS login page, 2) sign in, 3) export cookies from your browser, 4) paste them here and click Use Pasted Cookies.
+            1) Open and sign in to CIS WorkBench in your browser. 2) Import cookies from clipboard or file. 3) Session connects automatically.
           </Typography>
           <Typography variant="body2" color="warning.main">
-            Browser cookie extraction from inside the API container is not supported in this deployment. Use exported cookies from your host browser.
+            Browser profile extraction is disabled for Docker deployments. Import cookie text from your host browser instead.
           </Typography>
-          <Typography variant="body2">
-            Supported cookie input formats: Netscape cookie text, JSON cookie export, or raw "Cookie: name=value; ..." header.
-          </Typography>
-          <FormControlLabel
-            control={<Checkbox checked={noVerifySSL} onChange={(event) => setNoVerifySSL(event.target.checked)} />}
-            label="Disable SSL verification (testing)"
-          />
-          <TextField
-            select
-            label="Browser (optional)"
-            value={browser}
-            onChange={(event) => setBrowser(event.target.value)}
-            fullWidth
-          >
-            <MenuItem value="chrome">Chrome</MenuItem>
-            <MenuItem value="firefox">Firefox</MenuItem>
-            <MenuItem value="edge">Edge</MenuItem>
-            <MenuItem value="safari">Safari</MenuItem>
-          </TextField>
-          <TextField
-            label="Cookies Text (Netscape format)"
-            value={cookiesText}
-            onChange={(event) => setCookiesText(event.target.value)}
-            multiline
-            minRows={5}
-            fullWidth
-          />
-          <Stack direction="row" spacing={1}>
+
+          <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
             <Button variant="outlined" onClick={openWorkbenchLogin} disabled={busy}>
-              Open CIS Login Page
+              Open CIS WorkBench
             </Button>
-            <Button
-              variant="contained"
-              onClick={loginWithBrowser}
-              disabled={busy || !browserExtractionSupported}
-              title="Disabled: API runs in container and cannot read host browser profile/cookies."
-            >
-              Generate Cookie Session (Unsupported Here)
+            <Button variant="contained" onClick={pasteFromClipboardAndConnect} disabled={busy}>
+              Paste Clipboard and Connect
             </Button>
-            <Button variant="outlined" onClick={exportSavedCookies} disabled={busy}>
-              Export Saved Cookies
-            </Button>
-            <Button variant="outlined" onClick={copyCookiesToClipboard} disabled={busy}>
-              Copy Cookies
+            <Button variant="contained" component="label" disabled={busy}>
+              Import Cookie File and Connect
+              <input type="file" hidden accept=".txt,.json,.cookie,.cookies" onChange={importCookieFileAndConnect} />
             </Button>
           </Stack>
-          <Stack direction="row" spacing={1}>
-            <Button variant="contained" onClick={loginWithCookies} disabled={busy}>
-              Use Pasted Cookies
+
+          <Button variant="text" onClick={() => setManualCookieEditorOpen((open) => !open)} sx={{ alignSelf: "flex-start" }}>
+            {manualCookieEditorOpen ? "Hide Manual Cookie Editor" : "Show Manual Cookie Editor"}
+          </Button>
+
+          <Collapse in={manualCookieEditorOpen}>
+            <Stack spacing={1.5}>
+              <Typography variant="body2">
+                Supported formats: Netscape cookie text, JSON cookie export, or raw `Cookie: name=value; ...` header.
+              </Typography>
+              <TextField
+                label="Cookie Input"
+                value={cookiesText}
+                onChange={(event) => setCookiesText(event.target.value)}
+                multiline
+                minRows={6}
+                fullWidth
+              />
+              <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
+                <Button variant="contained" onClick={loginWithCookies} disabled={busy}>
+                  Connect Using Editor Text
+                </Button>
+                <Button variant="outlined" onClick={exportSavedCookies} disabled={busy}>
+                  Load Saved Cookies
+                </Button>
+                <Button variant="outlined" onClick={copyCookiesToClipboard} disabled={busy}>
+                  Copy Editor Text
+                </Button>
+              </Stack>
+              <FormControlLabel
+                control={<Checkbox checked={noVerifySSL} onChange={(event) => setNoVerifySSL(event.target.checked)} />}
+                label="Disable SSL verification (testing)"
+              />
+            </Stack>
+          </Collapse>
+
+          <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
+            <Button variant="outlined" onClick={loadStatus} disabled={busy}>
+              Refresh Status
             </Button>
             <Button variant="outlined" onClick={logout} disabled={busy}>
               Logout
             </Button>
-            <Button variant="outlined" onClick={loadStatus} disabled={busy}>
-              Check Status
-            </Button>
           </Stack>
-          <Typography variant="body2">
-            Logged in: <strong>{status.logged_in ? "Yes" : "No"}</strong>
-          </Typography>
         </Stack>
       </Paper>
 
