@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,10 +19,11 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/xuri/excelize/v2"
 )
 
 var (
-	validCISBenchFormats = []string{"json", "yaml", "csv", "markdown", "xccdf"}
+	validCISBenchFormats = []string{"xlsx", "json", "yaml", "csv", "markdown", "xccdf"}
 	benchmarkIDPattern   = regexp.MustCompile(`^\d+$`)
 )
 
@@ -815,6 +817,153 @@ func listCISBenchFiles(downloadDir string) ([]cisBenchFile, error) {
 	return files, nil
 }
 
+func uniqueNormalizedFormats(formats []string) []string {
+	seen := map[string]struct{}{}
+	normalized := make([]string, 0, len(formats))
+	for _, raw := range formats {
+		value := strings.ToLower(strings.TrimSpace(raw))
+		if value == "" {
+			continue
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		normalized = append(normalized, value)
+	}
+	return normalized
+}
+
+func resolveDownloadFormats(requested []string) (requestedFormats []string, cisBenchFormats []string, wantsXLSX bool, err error) {
+	requestedFormats = uniqueNormalizedFormats(requested)
+	if len(requestedFormats) == 0 {
+		requestedFormats = []string{"xlsx"}
+	}
+
+	for _, format := range requestedFormats {
+		if !slices.Contains(validCISBenchFormats, format) {
+			return nil, nil, false, fmt.Errorf("unsupported format: %s", format)
+		}
+	}
+
+	cisBenchFormatSet := map[string]struct{}{}
+	for _, format := range requestedFormats {
+		if format == "xlsx" {
+			wantsXLSX = true
+			// xlsx is generated from csv output after download.
+			cisBenchFormatSet["csv"] = struct{}{}
+			continue
+		}
+		cisBenchFormatSet[format] = struct{}{}
+	}
+
+	cisBenchFormats = make([]string, 0, len(cisBenchFormatSet))
+	for format := range cisBenchFormatSet {
+		cisBenchFormats = append(cisBenchFormats, format)
+	}
+	slices.Sort(cisBenchFormats)
+
+	if len(cisBenchFormats) == 0 {
+		cisBenchFormats = []string{"csv"}
+	}
+
+	return requestedFormats, cisBenchFormats, wantsXLSX, nil
+}
+
+func convertCSVToXLSX(csvPath string) (string, error) {
+	file, err := os.Open(csvPath)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	reader.FieldsPerRecord = -1
+	rows, err := reader.ReadAll()
+	if err != nil {
+		return "", err
+	}
+
+	workbook := excelize.NewFile()
+	sheet := workbook.GetSheetName(0)
+	for rowIndex, row := range rows {
+		for colIndex, value := range row {
+			cell, coordErr := excelize.CoordinatesToCellName(colIndex+1, rowIndex+1)
+			if coordErr != nil {
+				_ = workbook.Close()
+				return "", coordErr
+			}
+			if setErr := workbook.SetCellStr(sheet, cell, value); setErr != nil {
+				_ = workbook.Close()
+				return "", setErr
+			}
+		}
+	}
+
+	if len(rows) > 1 {
+		_ = workbook.SetPanes(sheet, &excelize.Panes{
+			Freeze:      true,
+			Split:       false,
+			XSplit:      0,
+			YSplit:      1,
+			TopLeftCell: "A2",
+			ActivePane:  "bottomLeft",
+		})
+	}
+
+	xlsxPath := strings.TrimSuffix(csvPath, filepath.Ext(csvPath)) + ".xlsx"
+	if saveErr := workbook.SaveAs(xlsxPath); saveErr != nil {
+		_ = workbook.Close()
+		return "", saveErr
+	}
+	if closeErr := workbook.Close(); closeErr != nil {
+		return "", closeErr
+	}
+
+	return xlsxPath, nil
+}
+
+func generateXLSXFromCSVs(downloadDir string, startedAt time.Time) ([]string, []string) {
+	entries, err := os.ReadDir(downloadDir)
+	if err != nil {
+		return nil, []string{fmt.Sprintf("failed to read download directory for xlsx generation: %v", err)}
+	}
+
+	generated := []string{}
+	warnings := []string{}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".csv") {
+			continue
+		}
+
+		csvPath := filepath.Join(downloadDir, entry.Name())
+		info, err := entry.Info()
+		if err != nil {
+			warnings = append(warnings, fmt.Sprintf("failed to inspect csv file %s: %v", entry.Name(), err))
+			continue
+		}
+
+		xlsxPath := strings.TrimSuffix(csvPath, filepath.Ext(csvPath)) + ".xlsx"
+		_, xlsxErr := os.Stat(xlsxPath)
+		xlsxExists := xlsxErr == nil
+
+		// Convert if csv was updated in this request window or xlsx does not exist yet.
+		if xlsxExists && info.ModTime().Before(startedAt.Add(-2*time.Second)) {
+			continue
+		}
+
+		generatedPath, convertErr := convertCSVToXLSX(csvPath)
+		if convertErr != nil {
+			warnings = append(warnings, fmt.Sprintf("failed to convert %s to xlsx: %v", entry.Name(), convertErr))
+			continue
+		}
+		generated = append(generated, filepath.Base(generatedPath))
+	}
+
+	slices.Sort(generated)
+	return generated, warnings
+}
+
 func (h *Handler) CISBenchDownload(c *gin.Context) {
 	if !h.ensureCISBenchEnabled(c) {
 		return
@@ -832,16 +981,10 @@ func (h *Handler) CISBenchDownload(c *gin.Context) {
 		return
 	}
 
-	formats := req.Formats
-	if len(formats) == 0 {
-		formats = []string{"json"}
-	}
-	for i := range formats {
-		formats[i] = strings.ToLower(strings.TrimSpace(formats[i]))
-		if !slices.Contains(validCISBenchFormats, formats[i]) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("unsupported format: %s", formats[i])})
-			return
-		}
+	requestedFormats, cisBenchFormats, wantsXLSX, formatErr := resolveDownloadFormats(req.Formats)
+	if formatErr != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": formatErr.Error()})
+		return
 	}
 
 	downloadDir := cisBenchDownloadDir()
@@ -851,13 +994,14 @@ func (h *Handler) CISBenchDownload(c *gin.Context) {
 	}
 
 	args := []string{"download", benchmarkID, "--output-dir", downloadDir}
-	for _, format := range formats {
+	for _, format := range cisBenchFormats {
 		args = append(args, "--format", format)
 	}
 	if req.Force {
 		args = append(args, "--force")
 	}
 
+	startedAt := time.Now().UTC()
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Minute)
 	defer cancel()
 
@@ -871,6 +1015,12 @@ func (h *Handler) CISBenchDownload(c *gin.Context) {
 		return
 	}
 
+	generatedXLSX := []string{}
+	warnings := []string{}
+	if wantsXLSX {
+		generatedXLSX, warnings = generateXLSXFromCSVs(downloadDir, startedAt)
+	}
+
 	files, listErr := listCISBenchFiles(downloadDir)
 	if listErr != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "download succeeded but failed to list files"})
@@ -878,12 +1028,15 @@ func (h *Handler) CISBenchDownload(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"message":      "download complete",
-		"benchmark_id": benchmarkID,
-		"formats":      formats,
-		"stdout":       stdout,
-		"stderr":       stderr,
-		"files":        files,
+		"message":        "download complete",
+		"benchmark_id":   benchmarkID,
+		"formats":        requestedFormats,
+		"source_formats": cisBenchFormats,
+		"generated_xlsx": generatedXLSX,
+		"warnings":       warnings,
+		"stdout":         stdout,
+		"stderr":         stderr,
+		"files":          files,
 	})
 }
 

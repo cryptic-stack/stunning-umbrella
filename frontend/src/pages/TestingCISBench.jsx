@@ -25,6 +25,15 @@ const defaultSearch = {
   limit: 25,
 };
 
+const downloadFormatOptions = [
+  { id: "xlsx", label: "XLSX" },
+  { id: "json", label: "JSON" },
+  { id: "csv", label: "CSV" },
+  { id: "yaml", label: "YAML" },
+  { id: "markdown", label: "Markdown" },
+  { id: "xccdf", label: "XCCDF" },
+];
+
 export default function TestingCISBench({ apiBase }) {
   const [status, setStatus] = useState({ logged_in: false });
   const [cookiesText, setCookiesText] = useState("");
@@ -33,6 +42,7 @@ export default function TestingCISBench({ apiBase }) {
   const [searchReq, setSearchReq] = useState(defaultSearch);
   const [searchResults, setSearchResults] = useState([]);
   const [downloadBenchmarkId, setDownloadBenchmarkId] = useState("");
+  const [downloadFormats, setDownloadFormats] = useState(["xlsx"]);
   const [files, setFiles] = useState([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -237,7 +247,7 @@ export default function TestingCISBench({ apiBase }) {
     try {
       const response = await axios.post(`${apiBase}/testing/cis-bench/download`, {
         benchmark_id,
-        formats: ["json"],
+        formats: downloadFormats,
       });
       setMessage(response.data?.message || `Downloaded benchmark ${benchmark_id}.`);
       setDownloadBenchmarkId("");
@@ -247,6 +257,18 @@ export default function TestingCISBench({ apiBase }) {
     } finally {
       setBusy(false);
     }
+  };
+
+  const toggleDownloadFormat = (formatID) => {
+    setDownloadFormats((current) => {
+      if (current.includes(formatID)) {
+        if (current.length === 1) {
+          return current;
+        }
+        return current.filter((value) => value !== formatID);
+      }
+      return [...current, formatID];
+    });
   };
 
   return (
@@ -365,6 +387,23 @@ export default function TestingCISBench({ apiBase }) {
             }
             label="Latest only"
           />
+          <Stack spacing={0.5}>
+            <Typography variant="body2">Download File Types</Typography>
+            <Stack direction={{ xs: "column", md: "row" }} spacing={1}>
+              {downloadFormatOptions.map((option) => (
+                <FormControlLabel
+                  key={option.id}
+                  control={
+                    <Checkbox
+                      checked={downloadFormats.includes(option.id)}
+                      onChange={() => toggleDownloadFormat(option.id)}
+                    />
+                  }
+                  label={option.label}
+                />
+              ))}
+            </Stack>
+          </Stack>
           <Button variant="contained" onClick={runSearch} disabled={busy}>
             Search
           </Button>
