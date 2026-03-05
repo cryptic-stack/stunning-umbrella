@@ -80,6 +80,11 @@ func cisBenchEnabled() bool {
 	return strings.EqualFold(strings.TrimSpace(os.Getenv("CIS_BENCH_TESTING_ENABLED")), "true")
 }
 
+func cisBenchAllowBrowserExtraction() bool {
+	value := strings.ToLower(strings.TrimSpace(os.Getenv("CIS_BENCH_ALLOW_BROWSER_EXTRACTION")))
+	return value == "true" || value == "1" || value == "yes"
+}
+
 func (h *Handler) ensureCISBenchEnabled(c *gin.Context) bool {
 	if cisBenchEnabled() {
 		return true
@@ -512,6 +517,12 @@ func (h *Handler) CISBenchLogin(c *gin.Context) {
 		_ = os.Chmod(tempCookiePath, 0o600)
 		args = append(args, "--cookies", tempCookiePath)
 	case "browser":
+		if !cisBenchAllowBrowserExtraction() {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"error": "browser cookie extraction is disabled in this deployment; paste exported cookies and use cookies mode",
+			})
+			return
+		}
 		browser := strings.ToLower(strings.TrimSpace(req.Browser))
 		if browser == "" {
 			browser = "chrome"
