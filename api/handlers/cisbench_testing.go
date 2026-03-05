@@ -26,6 +26,7 @@ import (
 var (
 	validCISBenchFormats = []string{"xlsx", "json", "yaml", "csv", "markdown", "xccdf"}
 	benchmarkIDPattern   = regexp.MustCompile(`^\d+$`)
+	fileTokenPattern     = regexp.MustCompile(`[^A-Za-z0-9]+`)
 )
 
 type cisBenchLoginRequest struct {
@@ -1047,7 +1048,7 @@ func uniqueNormalizedFormats(formats []string) []string {
 func resolveDownloadFormats(requested []string) (requestedFormats []string, cisBenchFormats []string, wantsXLSX bool, err error) {
 	requestedFormats = uniqueNormalizedFormats(requested)
 	if len(requestedFormats) == 0 {
-		requestedFormats = []string{"xlsx"}
+		requestedFormats = []string{"csv"}
 	}
 
 	for _, format := range requestedFormats {
@@ -1078,6 +1079,125 @@ func resolveDownloadFormats(requested []string) (requestedFormats []string, cisB
 	}
 
 	return requestedFormats, cisBenchFormats, wantsXLSX, nil
+}
+
+func sanitizeDownloadNamePart(raw string) string {
+	part := strings.TrimSpace(raw)
+	part = fileTokenPattern.ReplaceAllString(part, "_")
+	part = strings.Trim(part, "_")
+	return part
+}
+
+func canonicalDownloadFileName(originalName string) string {
+	baseName := filepath.Base(originalName)
+	ext := strings.ToLower(filepath.Ext(baseName))
+
+	derivedName := strings.TrimSpace(deriveBenchmarkNameFromFilename(baseName))
+	if derivedName == "" {
+		derivedName = strings.TrimSuffix(baseName, filepath.Ext(baseName))
+	}
+	derivedName = normalizeNameText(derivedName)
+	if !strings.Contains(strings.ToLower(derivedName), "benchmark") {
+		derivedName = strings.TrimSpace(derivedName + " Benchmark")
+	}
+	namePart := sanitizeDownloadNamePart(derivedName)
+	if namePart == "" {
+		namePart = "CIS_Benchmark"
+	}
+	if !strings.HasPrefix(strings.ToLower(namePart), "cis_") && !strings.EqualFold(namePart, "cis") {
+		namePart = "CIS_" + namePart
+	}
+
+	versionPart := strings.TrimSpace(deriveVersionFromFilename(baseName))
+	if versionPart != "" {
+		namePart = fmt.Sprintf("%s_v%s", namePart, versionPart)
+	}
+	if ext == "" {
+		return namePart
+	}
+	return namePart + ext
+}
+
+func uniqueDownloadName(dir, candidate, sourcePath string, reserved map[string]struct{}) string {
+	ext := filepath.Ext(candidate)
+	stem := strings.TrimSuffix(candidate, ext)
+	index := 2
+	for {
+		key := strings.ToLower(candidate)
+		if _, used := reserved[key]; used {
+			candidate = fmt.Sprintf("%s_%d%s", stem, index, ext)
+			index++
+			continue
+		}
+
+		targetPath := filepath.Join(dir, candidate)
+		info, err := os.Stat(targetPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				reserved[key] = struct{}{}
+				return candidate
+			}
+			// If state cannot be determined, reserve the name and continue with original.
+			reserved[key] = struct{}{}
+			return candidate
+		}
+		if info != nil && sameFilePath(targetPath, sourcePath) {
+			reserved[key] = struct{}{}
+			return candidate
+		}
+
+		candidate = fmt.Sprintf("%s_%d%s", stem, index, ext)
+		index++
+	}
+}
+
+func sameFilePath(left, right string) bool {
+	leftAbs, leftErr := filepath.Abs(left)
+	rightAbs, rightErr := filepath.Abs(right)
+	if leftErr != nil || rightErr != nil {
+		return left == right
+	}
+	return strings.EqualFold(leftAbs, rightAbs)
+}
+
+func normalizeDownloadedFileNames(paths []string) ([]string, []string) {
+	normalized := make([]string, 0, len(paths))
+	warnings := []string{}
+	reserved := map[string]struct{}{}
+
+	for _, sourcePath := range paths {
+		baseName := filepath.Base(sourcePath)
+		dir := filepath.Dir(sourcePath)
+		targetName := canonicalDownloadFileName(baseName)
+		if targetName == "" || strings.EqualFold(targetName, baseName) {
+			normalized = append(normalized, sourcePath)
+			reserved[strings.ToLower(baseName)] = struct{}{}
+			continue
+		}
+
+		targetName = uniqueDownloadName(dir, targetName, sourcePath, reserved)
+		targetPath := filepath.Join(dir, targetName)
+		if sameFilePath(targetPath, sourcePath) {
+			normalized = append(normalized, sourcePath)
+			continue
+		}
+
+		if err := os.Remove(targetPath); err != nil && !os.IsNotExist(err) {
+			warnings = append(warnings, fmt.Sprintf("failed to replace existing file %s: %v", targetName, err))
+			normalized = append(normalized, sourcePath)
+			continue
+		}
+
+		if err := os.Rename(sourcePath, targetPath); err != nil {
+			warnings = append(warnings, fmt.Sprintf("failed to rename %s to %s: %v", baseName, targetName, err))
+			normalized = append(normalized, sourcePath)
+			continue
+		}
+
+		normalized = append(normalized, targetPath)
+	}
+
+	return normalized, warnings
 }
 
 func convertCSVToXLSX(csvPath string) (string, error) {
@@ -1241,6 +1361,8 @@ func (h *Handler) CISBenchDownload(c *gin.Context) {
 		warnings = append(warnings, fmt.Sprintf("failed to detect changed files for ingestion: %v", changedErr))
 		modifiedPaths = []string{}
 	}
+	modifiedPaths, renameWarnings := normalizeDownloadedFileNames(modifiedPaths)
+	warnings = append(warnings, renameWarnings...)
 
 	allowedExtensions := requestedFormatExtensions(requestedFormats)
 	importedUploads := []map[string]any{}

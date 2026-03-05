@@ -27,9 +27,8 @@ const defaultSearch = {
 };
 
 const downloadFormatOptions = [
-  { id: "xlsx", label: "XLSX" },
-  { id: "json", label: "JSON" },
   { id: "csv", label: "CSV" },
+  { id: "json", label: "JSON" },
   { id: "yaml", label: "YAML" },
   { id: "markdown", label: "Markdown" },
   { id: "xccdf", label: "XCCDF" },
@@ -43,7 +42,7 @@ export default function TestingCISBench({ apiBase }) {
   const [searchReq, setSearchReq] = useState(defaultSearch);
   const [searchResults, setSearchResults] = useState([]);
   const [downloadBenchmarkId, setDownloadBenchmarkId] = useState("");
-  const [downloadFormats, setDownloadFormats] = useState(["xlsx"]);
+  const [downloadFormats, setDownloadFormats] = useState(["csv"]);
   const [files, setFiles] = useState([]);
   const [downloadProgress, setDownloadProgress] = useState({
     active: false,
