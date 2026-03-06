@@ -21,7 +21,7 @@ function extractApiError(err, fallbackMessage) {
   return fallbackMessage;
 }
 
-export default function GPOAssessment({ apiBase, benchmarkContext }) {
+export default function GPOAssessment({ apiBase, benchmarkContext, refreshToken }) {
   const [sources, setSources] = useState([]);
   const [frameworks, setFrameworks] = useState([]);
   const [versions, setVersions] = useState([]);
@@ -45,7 +45,7 @@ export default function GPOAssessment({ apiBase, benchmarkContext }) {
       setSources(loadedSources);
       setFrameworks(frameworkRes.data || []);
       setMappings(loadedMappings);
-      if (!policySourceId && loadedSources.length > 0) {
+      if (loadedSources.length > 0 && (!policySourceId || !loadedSources.some((item) => String(item.id) === String(policySourceId)))) {
         setPolicySourceId(String(loadedSources[0].id));
       }
       if (!mappingLabel && loadedMappings.length > 0) {
@@ -62,6 +62,11 @@ export default function GPOAssessment({ apiBase, benchmarkContext }) {
     loadChoices();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    loadChoices();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshToken, benchmarkContext]);
 
   useEffect(() => {
     const selectedMapping = mappings.find((item) => item.source_label === mappingLabel);
@@ -154,10 +159,6 @@ export default function GPOAssessment({ apiBase, benchmarkContext }) {
       setError("Select a policy source.");
       return;
     }
-    if (!mappingLabel) {
-      setError("Select a mapping label.");
-      return;
-    }
     try {
       const response = await axios.post(`${apiBase}/api/gpo/assess`, {
         policy_source_id: Number(policySourceId),
@@ -171,8 +172,8 @@ export default function GPOAssessment({ apiBase, benchmarkContext }) {
     }
   };
 
-  const canQueueAssessment = Boolean(policySourceId) && Boolean(mappingLabel);
-  const mappingLabels = [...new Set(mappings.map((item) => item.source_label).filter(Boolean))];
+  const canQueueAssessment = Boolean(policySourceId);
+  const mappingLabels = [...new Set(mappings.map((item) => item.source_label).filter((value) => value !== null && value !== undefined))];
 
   return (
     <Paper sx={{ p: 3 }}>
@@ -188,7 +189,7 @@ export default function GPOAssessment({ apiBase, benchmarkContext }) {
           <Button variant="outlined" onClick={loadChoices}>Refresh Sources/Mappings</Button>
         </Stack>
         {!policySourceId && <Alert severity="warning">Step 3 requires a Policy Source selection.</Alert>}
-        {!mappingLabel && <Alert severity="warning">Step 3 requires a Mapping Label selection.</Alert>}
+        {!mappingLabel && <Alert severity="info">Mapping Label is optional. If left blank, assessment uses selected framework/version rules.</Alert>}
 
         <FormControl fullWidth>
           <InputLabel id="source-select-label">Policy Source</InputLabel>
@@ -224,9 +225,9 @@ export default function GPOAssessment({ apiBase, benchmarkContext }) {
         <FormControl fullWidth>
           <InputLabel id="mapping-select-label">Mapping Label</InputLabel>
           <Select labelId="mapping-select-label" label="Mapping Label" value={mappingLabel} onChange={(event) => setMappingLabel(event.target.value)}>
-            <MenuItem value=""><em>Select mapping</em></MenuItem>
+            <MenuItem value=""><em>Any mapping label</em></MenuItem>
             {mappingLabels.map((label) => (
-              <MenuItem key={label} value={label}>{label}</MenuItem>
+              <MenuItem key={label || "__empty__"} value={label || ""}>{label || "(Unlabeled mapping)"}</MenuItem>
             ))}
           </Select>
         </FormControl>

@@ -5,11 +5,16 @@ import GPOAssessment from "./GPOAssessment";
 
 export default function GPOWorkflow({ apiBase }) {
   const [benchmarkContext, setBenchmarkContext] = useState(null);
+  const [refreshToken, setRefreshToken] = useState(0);
 
   return (
     <Stack spacing={2}>
-      <GPOImport apiBase={apiBase} onBenchmarkContextChange={setBenchmarkContext} />
-      <GPOAssessment apiBase={apiBase} benchmarkContext={benchmarkContext} />
+      <GPOImport
+        apiBase={apiBase}
+        onBenchmarkContextChange={setBenchmarkContext}
+        onPolicyImportQueued={() => setRefreshToken((value) => value + 1)}
+      />
+      <GPOAssessment apiBase={apiBase} benchmarkContext={benchmarkContext} refreshToken={refreshToken} />
     </Stack>
   );
 }

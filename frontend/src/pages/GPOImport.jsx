@@ -21,7 +21,7 @@ function extractApiError(err, fallbackMessage) {
   return fallbackMessage;
 }
 
-export default function GPOImport({ apiBase, onBenchmarkContextChange }) {
+export default function GPOImport({ apiBase, onBenchmarkContextChange, onPolicyImportQueued }) {
   const [sourceName, setSourceName] = useState("Current RSOP");
   const [sourceFile, setSourceFile] = useState(null);
   const [uploads, setUploads] = useState([]);
@@ -81,6 +81,9 @@ export default function GPOImport({ apiBase, onBenchmarkContextChange }) {
         headers: { "Content-Type": "multipart/form-data" },
       });
       setMessage(response.data.message || "GPO import queued");
+      if (onPolicyImportQueued) {
+        onPolicyImportQueued();
+      }
     } catch (err) {
       setError(extractApiError(err, "Failed to queue GPO import"));
     }
