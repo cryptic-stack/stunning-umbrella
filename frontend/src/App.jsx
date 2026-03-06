@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Alert, AppBar, Box, Container, CssBaseline, Tab, Tabs, Toolbar, Typography } from "@mui/material";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
-import Settings from "./pages/Settings";
 import ReportsHub from "./pages/ReportsHub";
 import GPOWorkflow from "./pages/GPOWorkflow";
 import BenchmarkWorkflow from "./pages/BenchmarkWorkflow";
@@ -34,7 +33,6 @@ export default function App() {
       <BenchmarkWorkflow key="benchmark-workflow" apiBase={API_BASE} onReportCreated={setReportId} />,
       <GPOWorkflow key="gpo-workflow" apiBase={API_BASE} />,
       <ReportsHub key="reports" apiBase={API_BASE} reportId={reportId} onReportIdChange={setReportId} />,
-      <Settings key="settings" apiBase={API_BASE} />,
     ],
     [reportId]
   );
@@ -60,7 +58,6 @@ export default function App() {
             <Tab label="Benchmark Workflow" />
             <Tab label="GPO Workflow" />
             <Tab label="Reports" />
-            <Tab label="Settings" />
           </Tabs>
         </Box>
         {views[tab]}

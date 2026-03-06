@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"log"
 	"os"
 	"strconv"
@@ -76,11 +75,6 @@ func main() {
 	redisClient := redis.NewClient(&redis.Options{Addr: redisAddr})
 
 	h := handlers.NewHandler(db, redisClient, uploadDir, exportDir)
-	authMiddleware, err := NewAuthMiddleware(context.Background())
-	if err != nil {
-		log.Fatalf("auth middleware initialization failed: %v", err)
-	}
-	rbacMiddleware := NewRBACMiddleware(db)
 
 	r := gin.Default()
 	r.MaxMultipartMemory = envInt64OrDefault("UPLOAD_MAX_BYTES", 20*1024*1024)
@@ -97,7 +91,7 @@ func main() {
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
-	RegisterRoutes(r, h, authMiddleware.RequireAuth(), rbacMiddleware.RequireRoles)
+	RegisterRoutes(r, h)
 
 	if err := r.Run(":" + port); err != nil {
 		log.Fatalf("api failed to start: %v", err)
