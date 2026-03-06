@@ -2,11 +2,30 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { Alert, Button, FormControl, InputLabel, MenuItem, Paper, Select, Stack, Typography } from "@mui/material";
 
+function extractApiError(err, fallbackMessage) {
+  const status = err?.response?.status;
+  const data = err?.response?.data;
+  if (typeof data?.error === "string" && data.error.trim()) {
+    return status ? `${data.error} (HTTP ${status})` : data.error;
+  }
+  if (typeof data === "string" && data.trim()) {
+    const compact = data.replace(/\s+/g, " ").trim();
+    return status ? `${compact} (HTTP ${status})` : compact;
+  }
+  if (err?.request && !err?.response) {
+    return `${fallbackMessage}: API not reachable`;
+  }
+  if (err?.message) {
+    return status ? `${fallbackMessage}: ${err.message} (HTTP ${status})` : `${fallbackMessage}: ${err.message}`;
+  }
+  return fallbackMessage;
+}
+
 export default function GPOAssessment({ apiBase }) {
   const [sources, setSources] = useState([]);
   const [frameworks, setFrameworks] = useState([]);
   const [versions, setVersions] = useState([]);
-  const [mappingLabels, setMappingLabels] = useState([]);
+  const [mappings, setMappings] = useState([]);
   const [policySourceId, setPolicySourceId] = useState("");
   const [frameworkId, setFrameworkId] = useState("");
   const [versionId, setVersionId] = useState("");
@@ -25,7 +44,7 @@ export default function GPOAssessment({ apiBase }) {
       const loadedMappings = mappingRes.data || [];
       setSources(loadedSources);
       setFrameworks(frameworkRes.data || []);
-      setMappingLabels([...new Set(loadedMappings.map((item) => item.source_label).filter(Boolean))]);
+      setMappings(loadedMappings);
       if (!policySourceId && loadedSources.length > 0) {
         setPolicySourceId(String(loadedSources[0].id));
       }
@@ -35,7 +54,7 @@ export default function GPOAssessment({ apiBase }) {
     } catch {
       setSources([]);
       setFrameworks([]);
-      setMappingLabels([]);
+      setMappings([]);
     }
   };
 
@@ -43,6 +62,16 @@ export default function GPOAssessment({ apiBase }) {
     loadChoices();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const selectedMapping = mappings.find((item) => item.source_label === mappingLabel);
+    if (!selectedMapping) {
+      return;
+    }
+    if (!frameworkId && selectedMapping.framework_id) {
+      setFrameworkId(String(selectedMapping.framework_id));
+    }
+  }, [mappingLabel, mappings, frameworkId]);
 
   useEffect(() => {
     const loadVersions = async () => {
@@ -61,11 +90,25 @@ export default function GPOAssessment({ apiBase }) {
     loadVersions();
   }, [apiBase, frameworkId]);
 
+  useEffect(() => {
+    const selectedMapping = mappings.find((item) => item.source_label === mappingLabel);
+    if (!selectedMapping) {
+      return;
+    }
+    if (!versionId && selectedMapping.version_id) {
+      setVersionId(String(selectedMapping.version_id));
+    }
+  }, [mappingLabel, mappings, versionId]);
+
   const runAssessment = async () => {
     setMessage("");
     setError("");
     if (!policySourceId) {
       setError("Select a policy source.");
+      return;
+    }
+    if (!mappingLabel) {
+      setError("Select a mapping label.");
       return;
     }
     try {
@@ -77,14 +120,22 @@ export default function GPOAssessment({ apiBase }) {
       });
       setMessage(`Assessment queued: #${response.data.assessment_run_id}`);
     } catch (err) {
-      setError(err?.response?.data?.error || "Failed to queue assessment");
+      setError(extractApiError(err, "Failed to queue assessment"));
     }
   };
+
+  const canQueueAssessment = Boolean(policySourceId) && Boolean(mappingLabel);
+  const mappingLabels = [...new Set(mappings.map((item) => item.source_label).filter(Boolean))];
 
   return (
     <Paper sx={{ p: 3 }}>
       <Stack spacing={2}>
         <Typography variant="h6">Step 3: Run Assessment</Typography>
+        <Stack direction="row" spacing={1}>
+          <Button variant="outlined" onClick={loadChoices}>Refresh Sources/Mappings</Button>
+        </Stack>
+        {!policySourceId && <Alert severity="warning">Step 3 requires a Policy Source selection.</Alert>}
+        {!mappingLabel && <Alert severity="warning">Step 3 requires a Mapping Label selection.</Alert>}
 
         <FormControl fullWidth>
           <InputLabel id="source-select-label">Policy Source</InputLabel>
@@ -120,18 +171,17 @@ export default function GPOAssessment({ apiBase }) {
         <FormControl fullWidth>
           <InputLabel id="mapping-select-label">Mapping Label</InputLabel>
           <Select labelId="mapping-select-label" label="Mapping Label" value={mappingLabel} onChange={(event) => setMappingLabel(event.target.value)}>
-            <MenuItem value=""><em>Any mapping</em></MenuItem>
+            <MenuItem value=""><em>Select mapping</em></MenuItem>
             {mappingLabels.map((label) => (
               <MenuItem key={label} value={label}>{label}</MenuItem>
             ))}
           </Select>
         </FormControl>
 
-        <Button variant="contained" onClick={runAssessment}>Queue Assessment</Button>
+        <Button variant="contained" onClick={runAssessment} disabled={!canQueueAssessment}>Queue Assessment</Button>
         {message && <Alert severity="success">{message}</Alert>}
         {error && <Alert severity="error">{error}</Alert>}
       </Stack>
     </Paper>
   );
 }
-

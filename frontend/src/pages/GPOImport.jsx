@@ -33,6 +33,9 @@ export default function GPOImport({ apiBase }) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
+  const canQueueSource = Boolean(sourceFile);
+  const canQueueMapping = Boolean(mappingFile) && Boolean(mappingLabel.trim());
+
   useEffect(() => {
     const loadFrameworks = async () => {
       try {
@@ -117,14 +120,15 @@ export default function GPOImport({ apiBase }) {
         <TextField label="Source Name" value={sourceName} onChange={(event) => setSourceName(event.target.value)} fullWidth />
         <Button component="label" variant="outlined">
           {sourceFile ? `Selected: ${sourceFile.name}` : "Choose Policy Source File"}
-          <input type="file" hidden onChange={(event) => setSourceFile(event.target.files?.[0] || null)} />
+          <input type="file" hidden accept=".xml,.inf,.pol,.txt" onChange={(event) => setSourceFile(event.target.files?.[0] || null)} />
         </Button>
-        <Button variant="contained" onClick={importSource}>Queue Policy Import</Button>
+        {!sourceFile && <Alert severity="warning">Step 1 requires a policy source file before queueing import.</Alert>}
+        <Button variant="contained" onClick={importSource} disabled={!canQueueSource}>Queue Policy Import</Button>
 
         <Typography variant="h6" sx={{ pt: 2 }}>Step 2: Import Benchmark Mapping</Typography>
         <Button component="label" variant="outlined">
           {mappingFile ? `Selected: ${mappingFile.name}` : "Choose Mapping CSV/JSON"}
-          <input type="file" hidden onChange={(event) => setMappingFile(event.target.files?.[0] || null)} />
+          <input type="file" hidden accept=".csv,.json" onChange={(event) => setMappingFile(event.target.files?.[0] || null)} />
         </Button>
         <FormControl fullWidth>
           <InputLabel id="framework-label">Framework</InputLabel>
@@ -145,7 +149,8 @@ export default function GPOImport({ apiBase }) {
           </Select>
         </FormControl>
         <TextField label="Mapping Label" value={mappingLabel} onChange={(event) => setMappingLabel(event.target.value)} fullWidth />
-        <Button variant="contained" onClick={importMapping}>Queue Mapping Import</Button>
+        {!canQueueMapping && <Alert severity="warning">Step 2 requires both a mapping file and mapping label.</Alert>}
+        <Button variant="contained" onClick={importMapping} disabled={!canQueueMapping}>Queue Mapping Import</Button>
 
         {message && <Alert severity="success">{message}</Alert>}
         {error && <Alert severity="error">{error}</Alert>}
