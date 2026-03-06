@@ -20,9 +20,9 @@ export default function App() {
   const views = useMemo(
     () => [
       <BenchmarkWorkflow key="benchmark-workflow" apiBase={API_BASE} onReportCreated={setReportId} />,
+      <GPOWorkflow key="gpo-workflow" apiBase={API_BASE} />,
       <ReportsHub key="reports" apiBase={API_BASE} reportId={reportId} onReportIdChange={setReportId} />,
       <Settings key="settings" apiBase={API_BASE} />,
-      <GPOWorkflow key="gpo-workflow" apiBase={API_BASE} />,
     ],
     [reportId]
   );
@@ -41,9 +41,9 @@ export default function App() {
         <Box sx={{ borderBottom: 1, borderColor: "divider", mb: 2 }}>
           <Tabs value={tab} onChange={(_, value) => setTab(value)}>
             <Tab label="Benchmark Workflow" />
+            <Tab label="GPO Workflow" />
             <Tab label="Reports" />
             <Tab label="Settings" />
-            <Tab label="GPO Workflow" />
           </Tabs>
         </Box>
         {views[tab]}
