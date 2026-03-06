@@ -50,4 +50,18 @@ func RegisterRoutes(r *gin.Engine, h *handlers.Handler, authMiddleware gin.Handl
 	admin.DELETE("/settings/users/:id", h.DeleteUser)
 	admin.POST("/api/gpo/import", h.ImportGPO)
 	admin.POST("/api/gpo/mappings/import", h.ImportGPOMappings)
+
+	testing := protected.Group("/")
+	testing.Use(requireRoles("admin"))
+	testing.GET("/testing/cis-bench/status", h.CISBenchStatus)
+	testing.POST("/testing/cis-bench/login", h.CISBenchLogin)
+	testing.POST("/testing/cis-bench/logout", h.CISBenchLogout)
+	testing.GET("/testing/cis-bench/cookies/export", h.CISBenchExportCookies)
+	testing.POST("/testing/cis-bench/catalog/refresh", h.CISBenchRefreshCatalog)
+	testing.POST("/testing/cis-bench/search", h.CISBenchSearch)
+	testing.POST("/testing/cis-bench/download", h.CISBenchDownload)
+	testing.GET("/testing/cis-bench/files", h.CISBenchListFiles)
+	testing.DELETE("/testing/cis-bench/files", h.CISBenchDeleteFiles)
+	testing.DELETE("/testing/cis-bench/files/:name", h.CISBenchDeleteFile)
+	testing.GET("/testing/cis-bench/files/:name/download", h.CISBenchDownloadFile)
 }

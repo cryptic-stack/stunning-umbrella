@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-mkdir -p /data/uploads /data/exports
+mkdir -p /data/uploads /data/exports /data/downloads /data/cisbench
 chown -R appuser:appuser /data
 
-exec su-exec appuser /usr/local/bin/api
+exec gosu appuser /usr/local/bin/api

@@ -13,10 +13,10 @@ except ImportError:  # pragma: no cover
 
 
 COLUMN_ALIASES = {
-    "framework": ["framework", "benchmark", "standard"],
-    "version": ["version", "framework_version"],
+    "framework": ["framework", "benchmark", "benchmark_title", "benchmark title", "standard"],
+    "version": ["version", "framework_version", "benchmark_version", "benchmark version"],
     "control_id": ["control_id", "control id", "control", "section #", "section"],
-    "safeguard_id": ["safeguard_id", "safeguard id", "safeguard", "recommendation", "recommendation #"],
+    "safeguard_id": ["safeguard_id", "safeguard id", "safeguard", "recommendation", "recommendation #", "ref"],
     "title": ["title", "name", "safeguard title"],
     "description": ["description", "details", "rationale", "text"],
     "profile": ["profile"],
