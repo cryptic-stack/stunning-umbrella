@@ -57,6 +57,22 @@ type gpoAssessmentView struct {
 	CompletedAt    *time.Time `json:"completed_at"`
 }
 
+type gpoSourceView struct {
+	ID         uint      `json:"id"`
+	SourceType string    `json:"source_type"`
+	SourceName string    `json:"source_name"`
+	Hostname   string    `json:"hostname"`
+	DomainName string    `json:"domain_name"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+type gpoMappingView struct {
+	FrameworkID *uint  `json:"framework_id"`
+	VersionID   *uint  `json:"version_id"`
+	SourceLabel string `json:"source_label"`
+	RuleCount   int64  `json:"rule_count"`
+}
+
 func (h *Handler) ImportGPO(c *gin.Context) {
 	var req gpoImportRequest
 	contentType := strings.ToLower(strings.TrimSpace(c.ContentType()))
@@ -222,6 +238,34 @@ func (h *Handler) ListGPOAssessments(c *gin.Context) {
 	rows := []gpoAssessmentView{}
 	if err := h.DB.Table("assessment_runs").Order("created_at DESC").Limit(200).Find(&rows).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list assessments"})
+		return
+	}
+	c.JSON(http.StatusOK, rows)
+}
+
+func (h *Handler) ListGPOSources(c *gin.Context) {
+	rows := []gpoSourceView{}
+	if err := h.DB.Raw(`
+SELECT id, source_type, source_name, hostname, domain_name, created_at
+FROM policy_sources
+ORDER BY created_at DESC
+LIMIT 200
+`).Scan(&rows).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list policy sources"})
+		return
+	}
+	c.JSON(http.StatusOK, rows)
+}
+
+func (h *Handler) ListGPOMappings(c *gin.Context) {
+	rows := []gpoMappingView{}
+	if err := h.DB.Raw(`
+SELECT framework_id, version_id, source_label, COUNT(*) AS rule_count
+FROM benchmark_policy_rules
+GROUP BY framework_id, version_id, source_label
+ORDER BY source_label ASC
+`).Scan(&rows).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list gpo mappings"})
 		return
 	}
 	c.JSON(http.StatusOK, rows)

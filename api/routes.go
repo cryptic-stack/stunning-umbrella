@@ -21,6 +21,8 @@ func RegisterRoutes(r *gin.Engine, h *handlers.Handler, authMiddleware gin.Handl
 	viewer.GET("/reports", h.ListReports)
 	viewer.GET("/reports/:report_id/download/:format", h.DownloadReport)
 	viewer.GET("/settings/branding", h.GetOrgBranding)
+	viewer.GET("/api/gpo/sources", h.ListGPOSources)
+	viewer.GET("/api/gpo/mappings", h.ListGPOMappings)
 	viewer.GET("/api/gpo/assessments", h.ListGPOAssessments)
 	viewer.GET("/api/gpo/assessments/:assessment_id", h.GetGPOAssessment)
 	viewer.GET("/api/gpo/assessments/:assessment_id/report/:format", h.DownloadGPOAssessmentReport)

@@ -35,6 +35,26 @@ The `gpo-assessment` module imports Windows policy exports, normalizes settings,
 4. `GET /api/gpo/assessments/{id}`
 5. `GET /api/gpo/assessments/{id}/report/{format}`
 
+## Step-by-step (UI)
+
+1. Open `GPO Import` tab.
+2. In **Step 1: Import Policy Source**:
+   Select `Source Type` from dropdown.
+   Choose policy source file (`gpresult.xml` first).
+   Click `Queue Policy Import`.
+3. In **Step 2: Import Benchmark Mapping**:
+   Choose mapping CSV/JSON file.
+   Select `Framework` and `Version` from dropdowns (optional but recommended).
+   Click `Queue Mapping Import`.
+4. Open `GPO Assess` tab (**Step 3**):
+   Select `Policy Source`, `Framework`, `Version`, and `Mapping Label` from dropdowns.
+   Click `Queue Assessment`.
+5. Open `GPO Reports` tab (**Step 4**):
+   Click `Refresh`.
+   Select an assessment from dropdown.
+   Click `Load Assessment Details`.
+   Download exports from table links (`DOCX`, `XLSX`, etc.).
+
 ## Notes
 
 - `gpresult_xml` is the primary import path for milestone 1.

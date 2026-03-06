@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
-import { Alert, Button, Link, Paper, Stack, Table, TableBody, TableCell, TableHead, TableRow, TextField, Typography } from "@mui/material";
+import { Alert, Button, FormControl, InputLabel, Link, MenuItem, Paper, Select, Stack, Table, TableBody, TableCell, TableHead, TableRow, Typography } from "@mui/material";
 
 const exportFormats = ["json", "md", "html", "csv", "xlsx", "docx"];
 
 export default function GPOReports({ apiBase }) {
   const [rows, setRows] = useState([]);
-  const [assessmentId, setAssessmentId] = useState("");
+  const [selectedAssessmentId, setSelectedAssessmentId] = useState("");
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
 
@@ -14,7 +14,11 @@ export default function GPOReports({ apiBase }) {
     setError("");
     try {
       const response = await axios.get(`${apiBase}/api/gpo/assessments`);
-      setRows(response.data || []);
+      const list = response.data || [];
+      setRows(list);
+      if (!selectedAssessmentId && list.length > 0) {
+        setSelectedAssessmentId(String(list[0].id));
+      }
     } catch (err) {
       setError(err?.response?.data?.error || "Failed to load assessments");
       setRows([]);
@@ -22,12 +26,12 @@ export default function GPOReports({ apiBase }) {
   };
 
   const loadAssessment = async () => {
-    if (!assessmentId) {
+    if (!selectedAssessmentId) {
       return;
     }
     setError("");
     try {
-      const response = await axios.get(`${apiBase}/api/gpo/assessments/${assessmentId}`);
+      const response = await axios.get(`${apiBase}/api/gpo/assessments/${selectedAssessmentId}`);
       setResult(response.data);
     } catch (err) {
       setError(err?.response?.data?.error || "Failed to load assessment details");
@@ -43,7 +47,7 @@ export default function GPOReports({ apiBase }) {
   return (
     <Paper sx={{ p: 3 }}>
       <Stack spacing={2}>
-        <Typography variant="h6">GPO Assessments</Typography>
+        <Typography variant="h6">Step 4: Review + Export</Typography>
         <Stack direction="row" spacing={1}>
           <Button variant="outlined" onClick={loadAssessments}>Refresh</Button>
         </Stack>
@@ -79,11 +83,18 @@ export default function GPOReports({ apiBase }) {
           </TableBody>
         </Table>
 
-        <Typography variant="h6" sx={{ pt: 2 }}>Assessment Details</Typography>
-        <Stack direction="row" spacing={1}>
-          <TextField label="Assessment ID" value={assessmentId} onChange={(event) => setAssessmentId(event.target.value)} />
-          <Button variant="contained" onClick={loadAssessment}>Load</Button>
-        </Stack>
+        <FormControl fullWidth>
+          <InputLabel id="assessment-select-label">Assessment</InputLabel>
+          <Select labelId="assessment-select-label" label="Assessment" value={selectedAssessmentId} onChange={(event) => setSelectedAssessmentId(event.target.value)}>
+            {rows.map((row) => (
+              <MenuItem key={row.id} value={String(row.id)}>
+                #{row.id} - {row.status}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        <Button variant="contained" onClick={loadAssessment}>Load Assessment Details</Button>
+
         {result && (
           <Alert severity="info">
             Assessment #{result.assessment?.id} has {(result.results || []).length} result item(s).
