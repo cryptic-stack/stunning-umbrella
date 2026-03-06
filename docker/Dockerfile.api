@@ -8,6 +8,7 @@ COPY api ./api
 RUN cd api && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /bin/api .
 
 FROM python:3.12-slim
+ARG CIS_BENCH_PYPI_VERSION=0.5.0
 RUN apt-get update \
     && apt-get install -y --no-install-recommends gosu ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
@@ -15,7 +16,11 @@ RUN apt-get update \
 WORKDIR /app
 COPY --from=builder /bin/api /usr/local/bin/api
 COPY third_party/cis-bench /opt/cis-bench
-RUN pip install --no-cache-dir /opt/cis-bench \
+RUN if [ -f /opt/cis-bench/pyproject.toml ] || [ -f /opt/cis-bench/setup.py ]; then \
+        pip install --no-cache-dir /opt/cis-bench; \
+    else \
+        pip install --no-cache-dir "cis-bench==${CIS_BENCH_PYPI_VERSION}"; \
+    fi \
     && rm -rf /opt/cis-bench
 COPY docker/api-entrypoint.sh /usr/local/bin/api-entrypoint.sh
 RUN chmod +x /usr/local/bin/api-entrypoint.sh
