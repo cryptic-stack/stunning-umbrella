@@ -37,12 +37,15 @@ export default function GPOImport({ apiBase, onBenchmarkContextChange, onPolicyI
     try {
       let rows = [];
       try {
-        const response = await axios.get(`${apiBase}/api/uploads`);
+        const response = await axios.get(`${apiBase}/uploads`);
         rows = response.data || [];
-      } catch {
-        // Compatibility fallback for deployments without /api alias paths.
-        const fallbackResponse = await axios.get(`${apiBase}/uploads`);
+      } catch (primaryErr) {
+        // Compatibility fallback for deployments that only expose api-prefixed paths.
+        const fallbackResponse = await axios.get(`${apiBase}/api/uploads`);
         rows = fallbackResponse.data || [];
+        if (!rows.length && primaryErr?.response?.status && primaryErr.response.status >= 500) {
+          throw primaryErr;
+        }
       }
 
       if (!Array.isArray(rows)) {
