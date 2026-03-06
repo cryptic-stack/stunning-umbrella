@@ -2,6 +2,25 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { Alert, Button, FormControl, InputLabel, MenuItem, Paper, Select, Stack, TextField, Typography } from "@mui/material";
 
+function extractApiError(err, fallbackMessage) {
+  const status = err?.response?.status;
+  const data = err?.response?.data;
+  if (typeof data?.error === "string" && data.error.trim()) {
+    return status ? `${data.error} (HTTP ${status})` : data.error;
+  }
+  if (typeof data === "string" && data.trim()) {
+    const compact = data.replace(/\s+/g, " ").trim();
+    return status ? `${compact} (HTTP ${status})` : compact;
+  }
+  if (err?.request && !err?.response) {
+    return `${fallbackMessage}: API not reachable. Verify API is running at ${window.location.protocol}//${window.location.hostname}:8080`;
+  }
+  if (err?.message) {
+    return status ? `${fallbackMessage}: ${err.message} (HTTP ${status})` : `${fallbackMessage}: ${err.message}`;
+  }
+  return fallbackMessage;
+}
+
 export default function GPOImport({ apiBase }) {
   const [sourceName, setSourceName] = useState("Current RSOP");
   const [sourceFile, setSourceFile] = useState(null);
@@ -59,7 +78,7 @@ export default function GPOImport({ apiBase }) {
       });
       setMessage(response.data.message || "GPO import queued");
     } catch (err) {
-      setError(err?.response?.data?.error || "Failed to queue GPO import");
+      setError(extractApiError(err, "Failed to queue GPO import"));
     }
   };
 
@@ -85,7 +104,7 @@ export default function GPOImport({ apiBase }) {
       });
       setMessage(response.data.message || "Mapping import queued");
     } catch (err) {
-      setError(err?.response?.data?.error || "Failed to queue mapping import");
+      setError(extractApiError(err, "Failed to queue mapping import"));
     }
   };
 
@@ -94,6 +113,7 @@ export default function GPOImport({ apiBase }) {
       <Stack spacing={2}>
         <Typography variant="h6">Step 1: Import Policy Source</Typography>
         <Alert severity="info">Source type is auto-discovered from the uploaded file.</Alert>
+        <Typography variant="caption" color="text.secondary">API endpoint: {apiBase}</Typography>
         <TextField label="Source Name" value={sourceName} onChange={(event) => setSourceName(event.target.value)} fullWidth />
         <Button component="label" variant="outlined">
           {sourceFile ? `Selected: ${sourceFile.name}` : "Choose Policy Source File"}
