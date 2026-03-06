@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { Alert, Button, FormControl, InputLabel, MenuItem, Paper, Select, Stack, TextField, Typography } from "@mui/material";
+import { fetchWorkflowCatalog } from "../api/workflowCatalog";
 
 function extractApiError(err, fallbackMessage) {
   const status = err?.response?.status;
@@ -35,18 +36,8 @@ export default function GPOImport({ apiBase, onBenchmarkContextChange, onPolicyI
   const loadUploads = async (attempt = 1) => {
     setError("");
     try {
-      let rows = [];
-      try {
-        const response = await axios.get(`${apiBase}/uploads`);
-        rows = response.data || [];
-      } catch (primaryErr) {
-        // Compatibility fallback for deployments that only expose api-prefixed paths.
-        const fallbackResponse = await axios.get(`${apiBase}/api/uploads`);
-        rows = fallbackResponse.data || [];
-        if (!rows.length && primaryErr?.response?.status && primaryErr.response.status >= 500) {
-          throw primaryErr;
-        }
-      }
+      const catalog = await fetchWorkflowCatalog(apiBase);
+      let rows = catalog.uploads || [];
 
       if (!Array.isArray(rows)) {
         rows = [];
@@ -62,13 +53,42 @@ export default function GPOImport({ apiBase, onBenchmarkContextChange, onPolicyI
         return String(rows[0].id);
       });
     } catch (err) {
-      if (attempt < 3) {
-        await new Promise((resolve) => setTimeout(resolve, 800 * attempt));
-        return loadUploads(attempt + 1);
+      try {
+        let rows = [];
+        try {
+          const response = await axios.get(`${apiBase}/uploads`);
+          rows = response.data || [];
+        } catch (primaryErr) {
+          // Compatibility fallback for deployments that only expose api-prefixed paths.
+          const fallbackResponse = await axios.get(`${apiBase}/api/uploads`);
+          rows = fallbackResponse.data || [];
+          if (!rows.length && primaryErr?.response?.status && primaryErr.response.status >= 500) {
+            throw primaryErr;
+          }
+        }
+        if (!Array.isArray(rows)) {
+          rows = [];
+        }
+        setUploads(rows);
+        setSelectedUploadId((previous) => {
+          if (!rows.length) {
+            return "";
+          }
+          if (rows.some((item) => String(item.id) === String(previous))) {
+            return previous;
+          }
+          return String(rows[0].id);
+        });
+        return;
+      } catch {
+        if (attempt < 3) {
+          await new Promise((resolve) => setTimeout(resolve, 800 * attempt));
+          return loadUploads(attempt + 1);
+        }
+        setUploads([]);
+        setSelectedUploadId("");
+        setError(extractApiError(err, "Failed to load uploaded benchmarks for Step 2"));
       }
-      setUploads([]);
-      setSelectedUploadId("");
-      setError(extractApiError(err, "Failed to load uploaded benchmarks for Step 2"));
     }
   };
 

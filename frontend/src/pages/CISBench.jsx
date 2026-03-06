@@ -30,7 +30,7 @@ const downloadFormatOptions = [
   { id: "csv", label: "CSV" },
 ];
 
-export default function TestingCISBench({ apiBase }) {
+export default function CISBench({ apiBase }) {
   const [status, setStatus] = useState({ logged_in: false });
   const [cookiesText, setCookiesText] = useState("");
   const [manualCookieEditorOpen, setManualCookieEditorOpen] = useState(false);
@@ -63,7 +63,7 @@ export default function TestingCISBench({ apiBase }) {
 
   const loadStatus = async () => {
     try {
-      const response = await axios.get(`${apiBase}/testing/cis-bench/status`);
+      const response = await axios.get(`${apiBase}/cis-bench/status`);
       setStatus(response.data || { logged_in: false });
     } catch (statusError) {
       setStatus({ logged_in: false });
@@ -73,7 +73,7 @@ export default function TestingCISBench({ apiBase }) {
 
   const loadFiles = async () => {
     try {
-      const response = await axios.get(`${apiBase}/testing/cis-bench/files`);
+      const response = await axios.get(`${apiBase}/cis-bench/files`);
       setFiles(response.data || []);
     } catch {
       setFiles([]);
@@ -163,7 +163,7 @@ export default function TestingCISBench({ apiBase }) {
 
     setBusy(true);
     try {
-      const response = await axios.post(`${apiBase}/testing/cis-bench/login`, {
+      const response = await axios.post(`${apiBase}/cis-bench/login`, {
         mode: "cookies",
         cookies_text: cookiePayload,
         no_verify_ssl: noVerifySSL,
@@ -224,7 +224,7 @@ export default function TestingCISBench({ apiBase }) {
     clearMessages();
     setBusy(true);
     try {
-      const response = await axios.get(`${apiBase}/testing/cis-bench/cookies/export`);
+      const response = await axios.get(`${apiBase}/cis-bench/cookies/export`);
       const cookieText = response.data?.cookies_text || "";
       setCookiesText(cookieText);
       setManualCookieEditorOpen(true);
@@ -260,7 +260,7 @@ export default function TestingCISBench({ apiBase }) {
     clearMessages();
     setBusy(true);
     try {
-      const response = await axios.post(`${apiBase}/testing/cis-bench/logout`, {});
+      const response = await axios.post(`${apiBase}/cis-bench/logout`, {});
       setMessage(response.data?.message || "Logged out.");
       await loadStatus();
     } catch (logoutError) {
@@ -274,7 +274,7 @@ export default function TestingCISBench({ apiBase }) {
     clearMessages();
     setBusy(true);
     try {
-      const response = await axios.post(`${apiBase}/testing/cis-bench/catalog/refresh`, {
+      const response = await axios.post(`${apiBase}/cis-bench/catalog/refresh`, {
         browser: "chrome",
         no_verify_ssl: noVerifySSL,
       });
@@ -290,7 +290,7 @@ export default function TestingCISBench({ apiBase }) {
     clearMessages();
     setBusy(true);
     try {
-      const response = await axios.post(`${apiBase}/testing/cis-bench/search`, searchReq);
+      const response = await axios.post(`${apiBase}/cis-bench/search`, searchReq);
       setSearchResults(response.data?.results || []);
       setMessage(`Found ${response.data?.count || 0} benchmark(s).`);
     } catch (searchError) {
@@ -312,7 +312,7 @@ export default function TestingCISBench({ apiBase }) {
     setBusy(true);
     startDownloadProgress(`Downloading benchmark ${benchmark_id}`);
     try {
-      const response = await axios.post(`${apiBase}/testing/cis-bench/download`, {
+      const response = await axios.post(`${apiBase}/cis-bench/download`, {
         benchmark_id,
         formats: downloadFormats,
       });
@@ -335,7 +335,7 @@ export default function TestingCISBench({ apiBase }) {
 
     setBusy(true);
     try {
-      const response = await axios.delete(`${apiBase}/testing/cis-bench/files/${encodeURIComponent(name)}`);
+      const response = await axios.delete(`${apiBase}/cis-bench/files/${encodeURIComponent(name)}`);
       setMessage(response.data?.message || `Deleted ${name}.`);
       await loadFiles();
     } catch (deleteError) {
@@ -353,7 +353,7 @@ export default function TestingCISBench({ apiBase }) {
 
     setBusy(true);
     try {
-      const response = await axios.delete(`${apiBase}/testing/cis-bench/files`, { params: { all: true } });
+      const response = await axios.delete(`${apiBase}/cis-bench/files`, { params: { all: true } });
       setMessage(response.data?.message || "Deleted downloaded files.");
       await loadFiles();
     } catch (deleteError) {
@@ -377,7 +377,7 @@ export default function TestingCISBench({ apiBase }) {
 
   return (
     <Stack spacing={2}>
-      <Typography variant="h6">CIS Bench (Testing)</Typography>
+      <Typography variant="h6">CIS Bench</Typography>
       {message && <Alert severity="success">{message}</Alert>}
       {error && <Alert severity="error">{error}</Alert>}
 
@@ -437,7 +437,7 @@ export default function TestingCISBench({ apiBase }) {
               </Stack>
               <FormControlLabel
                 control={<Checkbox checked={noVerifySSL} onChange={(event) => setNoVerifySSL(event.target.checked)} />}
-                label="Disable SSL verification (testing)"
+                label="Disable SSL verification"
               />
             </Stack>
           </Collapse>
@@ -594,7 +594,7 @@ export default function TestingCISBench({ apiBase }) {
                         size="small"
                         variant="outlined"
                         component="a"
-                        href={`${apiBase}/testing/cis-bench/files/${encodeURIComponent(file.name)}/download`}
+                        href={`${apiBase}/cis-bench/files/${encodeURIComponent(file.name)}/download`}
                       >
                         Download
                       </Button>

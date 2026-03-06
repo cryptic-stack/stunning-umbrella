@@ -5,7 +5,6 @@ import Settings from "./pages/Settings";
 import ReportsHub from "./pages/ReportsHub";
 import GPOWorkflow from "./pages/GPOWorkflow";
 import BenchmarkWorkflow from "./pages/BenchmarkWorkflow";
-import TestingCISBench from "./pages/TestingCISBench";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
 const appTheme = createTheme({
@@ -24,7 +23,6 @@ export default function App() {
       <GPOWorkflow key="gpo-workflow" apiBase={API_BASE} />,
       <ReportsHub key="reports" apiBase={API_BASE} reportId={reportId} onReportIdChange={setReportId} />,
       <Settings key="settings" apiBase={API_BASE} />,
-      <TestingCISBench key="testing-cis-bench" apiBase={API_BASE} />,
     ],
     [reportId]
   );
@@ -46,7 +44,6 @@ export default function App() {
             <Tab label="GPO Workflow" />
             <Tab label="Reports" />
             <Tab label="Settings" />
-            <Tab label="Testing" />
           </Tabs>
         </Box>
         {views[tab]}

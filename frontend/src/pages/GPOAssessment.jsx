@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { Alert, Button, FormControl, InputLabel, MenuItem, Paper, Select, Stack, Typography } from "@mui/material";
+import { fetchWorkflowCatalog } from "../api/workflowCatalog";
 
 function extractApiError(err, fallbackMessage) {
   const status = err?.response?.status;
@@ -35,15 +36,11 @@ export default function GPOAssessment({ apiBase, benchmarkContext, refreshToken 
 
   const loadChoices = async () => {
     try {
-      const [sourceRes, frameworkRes, mappingRes] = await Promise.all([
-        axios.get(`${apiBase}/api/gpo/sources`),
-        axios.get(`${apiBase}/api/frameworks`),
-        axios.get(`${apiBase}/api/gpo/mappings`),
-      ]);
-      const loadedSources = sourceRes.data || [];
-      const loadedMappings = mappingRes.data || [];
+      const catalog = await fetchWorkflowCatalog(apiBase);
+      const loadedSources = catalog.gpo_sources || [];
+      const loadedMappings = catalog.gpo_mappings || [];
       setSources(loadedSources);
-      setFrameworks(frameworkRes.data || []);
+      setFrameworks(catalog.frameworks || []);
       setMappings(loadedMappings);
       if (loadedSources.length > 0 && (!policySourceId || !loadedSources.some((item) => String(item.id) === String(policySourceId)))) {
         setPolicySourceId(String(loadedSources[0].id));
@@ -52,9 +49,22 @@ export default function GPOAssessment({ apiBase, benchmarkContext, refreshToken 
         setMappingLabel(loadedMappings[0].source_label || "");
       }
     } catch {
-      setSources([]);
-      setFrameworks([]);
-      setMappings([]);
+      try {
+        const [sourceRes, frameworkRes, mappingRes] = await Promise.all([
+          axios.get(`${apiBase}/api/gpo/sources`),
+          axios.get(`${apiBase}/api/frameworks`),
+          axios.get(`${apiBase}/api/gpo/mappings`),
+        ]);
+        const loadedSources = sourceRes.data || [];
+        const loadedMappings = mappingRes.data || [];
+        setSources(loadedSources);
+        setFrameworks(frameworkRes.data || []);
+        setMappings(loadedMappings);
+      } catch {
+        setSources([]);
+        setFrameworks([]);
+        setMappings([]);
+      }
     }
   };
 

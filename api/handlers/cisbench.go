@@ -86,7 +86,7 @@ type cookieInputRecord struct {
 }
 
 func cisBenchEnabled() bool {
-	return strings.EqualFold(strings.TrimSpace(os.Getenv("CIS_BENCH_TESTING_ENABLED")), "true")
+	return strings.EqualFold(strings.TrimSpace(os.Getenv("CIS_BENCH_ENABLED")), "true")
 }
 
 func cisBenchAllowBrowserExtraction() bool {
@@ -98,7 +98,7 @@ func (h *Handler) ensureCISBenchEnabled(c *gin.Context) bool {
 	if cisBenchEnabled() {
 		return true
 	}
-	c.JSON(http.StatusNotFound, gin.H{"error": "cis-bench testing endpoints are disabled"})
+	c.JSON(http.StatusNotFound, gin.H{"error": "cis-bench endpoints are disabled"})
 	return false
 }
 

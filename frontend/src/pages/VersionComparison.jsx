@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { Alert, Button, MenuItem, Paper, Stack, TextField, Typography } from "@mui/material";
+import { fetchWorkflowCatalog } from "../api/workflowCatalog";
 
 export default function VersionComparison({ apiBase, onReportCreated }) {
   const [frameworks, setFrameworks] = useState([]);
@@ -15,12 +16,18 @@ export default function VersionComparison({ apiBase, onReportCreated }) {
 
   const refreshCatalog = async () => {
     try {
-      const [frameworkRes, uploadRes] = await Promise.all([axios.get(`${apiBase}/frameworks`), axios.get(`${apiBase}/uploads`)]);
-      setFrameworks(frameworkRes.data || []);
-      setUploads(uploadRes.data || []);
+      const catalog = await fetchWorkflowCatalog(apiBase);
+      setFrameworks(catalog.frameworks || []);
+      setUploads(catalog.uploads || []);
     } catch {
-      setFrameworks([]);
-      setUploads([]);
+      try {
+        const [frameworkRes, uploadRes] = await Promise.all([axios.get(`${apiBase}/frameworks`), axios.get(`${apiBase}/uploads`)]);
+        setFrameworks(frameworkRes.data || []);
+        setUploads(uploadRes.data || []);
+      } catch {
+        setFrameworks([]);
+        setUploads([]);
+      }
     }
   };
 

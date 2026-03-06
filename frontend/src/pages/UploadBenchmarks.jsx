@@ -20,6 +20,7 @@ import {
   Typography,
 } from "@mui/material";
 import FileDropzone from "../components/FileDropzone";
+import { fetchWorkflowCatalog } from "../api/workflowCatalog";
 
 export default function UploadBenchmarks({ apiBase }) {
   const [framework, setFramework] = useState("CIS Controls");
@@ -37,13 +38,10 @@ export default function UploadBenchmarks({ apiBase }) {
 
   const loadUploads = async () => {
     try {
-      const [uploadRes, frameworkRes] = await Promise.all([
-        axios.get(`${apiBase}/uploads`),
-        axios.get(`${apiBase}/frameworks`),
-      ]);
-      const rows = uploadRes.data || [];
+      const catalog = await fetchWorkflowCatalog(apiBase);
+      const rows = catalog.uploads || [];
       setUploads(rows);
-      setFrameworks(frameworkRes.data || []);
+      setFrameworks(catalog.frameworks || []);
       setTagEdits((prev) => {
         const next = { ...prev };
         for (const row of rows) {
@@ -57,8 +55,18 @@ export default function UploadBenchmarks({ apiBase }) {
         return next;
       });
     } catch {
-      setUploads([]);
-      setFrameworks([]);
+      try {
+        const [uploadRes, frameworkRes] = await Promise.all([
+          axios.get(`${apiBase}/uploads`),
+          axios.get(`${apiBase}/frameworks`),
+        ]);
+        const rows = uploadRes.data || [];
+        setUploads(rows);
+        setFrameworks(frameworkRes.data || []);
+      } catch {
+        setUploads([]);
+        setFrameworks([]);
+      }
     }
   };
 
