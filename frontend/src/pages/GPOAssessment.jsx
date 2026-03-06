@@ -33,7 +33,7 @@ export default function GPOAssessment({ apiBase, benchmarkContext, refreshToken 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const loadChoices = async () => {
+  const loadChoices = async (attempt = 1) => {
     try {
       const catalog = await fetchWorkflowCatalog(apiBase);
       const loadedSources = Array.isArray(catalog.gpo_sources) ? catalog.gpo_sources : [];
@@ -51,11 +51,38 @@ export default function GPOAssessment({ apiBase, benchmarkContext, refreshToken 
         return String(loadedSources[0].id);
       });
       setError("");
+      return;
     } catch {
-      setSources([]);
-      setFrameworks([]);
-      setPolicySourceId("");
-      setError("Failed to load assessment context. Refresh and verify API services are healthy.");
+      try {
+        const [sourceRes, frameworkRes] = await Promise.all([
+          axios.get(`${apiBase}/api/gpo/sources`),
+          axios.get(`${apiBase}/api/frameworks`),
+        ]);
+        const loadedSources = Array.isArray(sourceRes.data) ? sourceRes.data : [];
+        const loadedFrameworks = Array.isArray(frameworkRes.data) ? frameworkRes.data : [];
+        setSources(loadedSources);
+        setFrameworks(loadedFrameworks);
+        setPolicySourceId((previous) => {
+          if (!loadedSources.length) {
+            return "";
+          }
+          if (loadedSources.some((item) => String(item.id) === String(previous))) {
+            return previous;
+          }
+          return String(loadedSources[0].id);
+        });
+        setError("");
+        return;
+      } catch {
+        if (attempt < 3) {
+          await new Promise((resolve) => setTimeout(resolve, 700 * attempt));
+          return loadChoices(attempt + 1);
+        }
+        setSources([]);
+        setFrameworks([]);
+        setPolicySourceId("");
+        setError("Failed to load assessment context. Refresh and verify API services are healthy.");
+      }
     }
   };
 
@@ -193,4 +220,3 @@ export default function GPOAssessment({ apiBase, benchmarkContext, refreshToken 
     </Paper>
   );
 }
-
