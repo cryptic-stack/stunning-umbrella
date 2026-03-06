@@ -34,20 +34,42 @@ export default function GPOAssessment({ apiBase, benchmarkContext, refreshToken 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
+  const applyChoiceData = (loadedSources, loadedFrameworks, loadedMappings) => {
+    const nextSources = Array.isArray(loadedSources) ? loadedSources : [];
+    const nextFrameworks = Array.isArray(loadedFrameworks) ? loadedFrameworks : [];
+    const nextMappings = Array.isArray(loadedMappings) ? loadedMappings : [];
+
+    setSources(nextSources);
+    setFrameworks(nextFrameworks);
+    setMappings(nextMappings);
+
+    setPolicySourceId((previous) => {
+      if (!nextSources.length) {
+        return "";
+      }
+      if (nextSources.some((item) => String(item.id) === String(previous))) {
+        return previous;
+      }
+      return String(nextSources[0].id);
+    });
+
+    setMappingLabel((previous) => {
+      const labels = [...new Set(nextMappings.map((item) => item.source_label).filter((value) => value !== null && value !== undefined))];
+      if (!labels.length) {
+        return "";
+      }
+      if (labels.some((value) => String(value || "") === String(previous || ""))) {
+        return previous;
+      }
+      return String(labels[0] || "");
+    });
+  };
+
   const loadChoices = async () => {
     try {
       const catalog = await fetchWorkflowCatalog(apiBase);
-      const loadedSources = catalog.gpo_sources || [];
-      const loadedMappings = catalog.gpo_mappings || [];
-      setSources(loadedSources);
-      setFrameworks(catalog.frameworks || []);
-      setMappings(loadedMappings);
-      if (loadedSources.length > 0 && (!policySourceId || !loadedSources.some((item) => String(item.id) === String(policySourceId)))) {
-        setPolicySourceId(String(loadedSources[0].id));
-      }
-      if (!mappingLabel && loadedMappings.length > 0) {
-        setMappingLabel(loadedMappings[0].source_label || "");
-      }
+      applyChoiceData(catalog.gpo_sources || [], catalog.frameworks || [], catalog.gpo_mappings || []);
+      setError("");
     } catch {
       try {
         const [sourceRes, frameworkRes, mappingRes] = await Promise.all([
@@ -55,15 +77,11 @@ export default function GPOAssessment({ apiBase, benchmarkContext, refreshToken 
           axios.get(`${apiBase}/api/frameworks`),
           axios.get(`${apiBase}/api/gpo/mappings`),
         ]);
-        const loadedSources = sourceRes.data || [];
-        const loadedMappings = mappingRes.data || [];
-        setSources(loadedSources);
-        setFrameworks(frameworkRes.data || []);
-        setMappings(loadedMappings);
+        applyChoiceData(sourceRes.data || [], frameworkRes.data || [], mappingRes.data || []);
+        setError("");
       } catch {
-        setSources([]);
-        setFrameworks([]);
-        setMappings([]);
+        applyChoiceData([], [], []);
+        setError("Failed to load policy sources/mappings. Refresh and verify API services are healthy.");
       }
     }
   };
@@ -204,6 +222,11 @@ export default function GPOAssessment({ apiBase, benchmarkContext, refreshToken 
         <FormControl fullWidth>
           <InputLabel id="source-select-label">Policy Source</InputLabel>
           <Select labelId="source-select-label" label="Policy Source" value={policySourceId} onChange={(event) => setPolicySourceId(event.target.value)}>
+            {sources.length === 0 && (
+              <MenuItem value="" disabled>
+                No policy sources available yet
+              </MenuItem>
+            )}
             {sources.map((item) => (
               <MenuItem key={item.id} value={String(item.id)}>
                 #{item.id} {item.source_name || item.source_type}
