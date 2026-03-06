@@ -34,7 +34,7 @@ export default function GPOImport({ apiBase, onBenchmarkContextChange, onPolicyI
 
   const loadUploads = async () => {
     try {
-      const response = await axios.get(`${apiBase}/uploads`);
+      const response = await axios.get(`${apiBase}/api/uploads`);
       const rows = response.data || [];
       setUploads(rows);
       if (!selectedUploadId && rows.length > 0) {
@@ -42,6 +42,7 @@ export default function GPOImport({ apiBase, onBenchmarkContextChange, onPolicyI
       }
     } catch {
       setUploads([]);
+      setError("Failed to load uploaded benchmarks for Step 2.");
     }
   };
 

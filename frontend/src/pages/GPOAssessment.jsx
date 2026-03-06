@@ -37,7 +37,7 @@ export default function GPOAssessment({ apiBase, benchmarkContext, refreshToken 
     try {
       const [sourceRes, frameworkRes, mappingRes] = await Promise.all([
         axios.get(`${apiBase}/api/gpo/sources`),
-        axios.get(`${apiBase}/frameworks`),
+        axios.get(`${apiBase}/api/frameworks`),
         axios.get(`${apiBase}/api/gpo/mappings`),
       ]);
       const loadedSources = sourceRes.data || [];
@@ -86,7 +86,7 @@ export default function GPOAssessment({ apiBase, benchmarkContext, refreshToken 
         return;
       }
       try {
-        const response = await axios.get(`${apiBase}/frameworks/${frameworkId}/versions`);
+        const response = await axios.get(`${apiBase}/api/frameworks/${frameworkId}/versions`);
         setVersions(response.data || []);
       } catch {
         setVersions([]);
