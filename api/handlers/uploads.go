@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"os"
@@ -115,17 +113,7 @@ func (h *Handler) TagUpload(c *gin.Context) {
 		return
 	}
 
-	jobPayload := gin.H{
-		"upload_id":  upload.ID,
-		"framework":  framework,
-		"version":    version,
-		"version_id": versionID,
-	}
-	payload, _ := json.Marshal(jobPayload)
-	if err := h.Redis.RPush(context.Background(), "parse_jobs", payload).Err(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "metadata updated but failed to enqueue parse job"})
-		return
-	}
+	enqueueErr := h.enqueueParseJob(upload.ID, framework, version, versionID)
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":           "upload tagged",
@@ -139,6 +127,58 @@ func (h *Handler) TagUpload(c *gin.Context) {
 		"version_id":        versionID,
 		"name_similarity":   similarity,
 		"matched_framework": matched,
+		"parse_enqueued":    enqueueErr == nil,
+		"warning": func() string {
+			if enqueueErr != nil {
+				return "metadata updated, but parse job queue is temporarily unavailable"
+			}
+			return ""
+		}(),
+	})
+}
+
+func (h *Handler) RequeueUploadParse(c *gin.Context) {
+	uploadID, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid upload id"})
+		return
+	}
+
+	upload := models.UploadedFile{}
+	if err := h.DB.First(&upload, uploadID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "upload not found"})
+		return
+	}
+
+	framework := strings.TrimSpace(upload.Framework)
+	if framework == "" {
+		framework, _, _ = h.resolveFrameworkName("", upload.Filename)
+	}
+	version := strings.TrimSpace(upload.Version)
+	if version == "" {
+		version = deriveVersionFromFilename(upload.Filename)
+	}
+	if version == "" {
+		version = "upload"
+	}
+
+	_, versionID, err := h.ensureFrameworkAndVersion(framework, version, upload.StoredPath, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to resolve framework/version metadata"})
+		return
+	}
+
+	if err := h.enqueueParseJob(upload.ID, framework, version, versionID); err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "failed to enqueue parse job"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":        "parse job queued",
+		"upload_id":      upload.ID,
+		"framework":      framework,
+		"version":        version,
+		"parse_enqueued": true,
 	})
 }
 

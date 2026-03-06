@@ -202,6 +202,18 @@ export default function UploadBenchmarks({ apiBase }) {
     }
   };
 
+  const reparseUpload = async (uploadId) => {
+    setError("");
+    setMessage("");
+    try {
+      const response = await requestWithFallback("post", `/uploads/${uploadId}/reparse`, null, null);
+      const warning = response?.data?.warning ? ` (${response.data.warning})` : "";
+      setMessage(`Queued parse for upload #${uploadId}${warning}`);
+    } catch (reparseError) {
+      setError(extractApiError(reparseError, "Failed to queue parse"));
+    }
+  };
+
   return (
     <Paper sx={{ p: 3 }}>
       <Stack spacing={2}>
@@ -319,6 +331,9 @@ export default function UploadBenchmarks({ apiBase }) {
                     </Button>
                     <Button size="small" variant="outlined" onClick={() => saveTag(row.id)}>
                       Save
+                    </Button>
+                    <Button size="small" variant="outlined" onClick={() => reparseUpload(row.id)}>
+                      Reparse
                     </Button>
                     <Button size="small" color="error" variant="outlined" onClick={() => deleteUpload(row.id)}>
                       Delete

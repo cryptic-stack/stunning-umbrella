@@ -1,10 +1,8 @@
 package handlers
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -27,11 +25,11 @@ var allowedUploadTypes = map[string]bool{
 func uploadMaxBytes() int64 {
 	raw := strings.TrimSpace(os.Getenv("UPLOAD_MAX_BYTES"))
 	if raw == "" {
-		return 20 * 1024 * 1024
+		return 100 * 1024 * 1024
 	}
 	parsed, err := strconv.ParseInt(raw, 10, 64)
 	if err != nil || parsed <= 0 {
-		return 20 * 1024 * 1024
+		return 100 * 1024 * 1024
 	}
 	return parsed
 }
@@ -237,17 +235,7 @@ func (h *Handler) UploadFile(c *gin.Context) {
 		return
 	}
 
-	jobPayload := gin.H{
-		"upload_id":  upload.ID,
-		"framework":  frameworkName,
-		"version":    versionLabel,
-		"version_id": versionID,
-	}
-	payload, _ := json.Marshal(jobPayload)
-	if err := h.Redis.RPush(context.Background(), "parse_jobs", payload).Err(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "uploaded but failed to enqueue parse job"})
-		return
-	}
+	enqueueErr := h.enqueueParseJob(upload.ID, frameworkName, versionLabel, versionID)
 
 	c.JSON(http.StatusCreated, gin.H{
 		"message":            "file uploaded",
@@ -260,5 +248,12 @@ func (h *Handler) UploadFile(c *gin.Context) {
 		"matched_framework":  matchedFramework,
 		"duplicate_replaced": duplicateReplaced,
 		"replaced_upload_id": duplicateUploadID,
+		"parse_enqueued":     enqueueErr == nil,
+		"warning": func() string {
+			if enqueueErr != nil {
+				return "file uploaded, but parse job queue is temporarily unavailable"
+			}
+			return ""
+		}(),
 	})
 }
