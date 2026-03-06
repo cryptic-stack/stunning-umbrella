@@ -24,12 +24,12 @@ function extractApiError(err, fallbackMessage) {
 export default function GPOImport({ apiBase, onBenchmarkContextChange, onPolicyImportQueued }) {
   const [sourceName, setSourceName] = useState("Current RSOP");
   const [sourceFile, setSourceFile] = useState(null);
+  const [isImportingSource, setIsImportingSource] = useState(false);
   const [uploads, setUploads] = useState([]);
   const [selectedUploadId, setSelectedUploadId] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const canQueueSource = Boolean(sourceFile);
   const selectedUpload = uploads.find((item) => String(item.id) === String(selectedUploadId));
 
   const loadUploads = async () => {
@@ -66,17 +66,18 @@ export default function GPOImport({ apiBase, onBenchmarkContextChange, onPolicyI
     });
   }, [onBenchmarkContextChange, selectedUpload]);
 
-  const importSource = async () => {
+  const importSource = async (fileToImport) => {
     setMessage("");
     setError("");
-    if (!sourceFile) {
+    if (!fileToImport) {
       setError("Choose a policy source file.");
       return;
     }
+    setIsImportingSource(true);
     try {
       const formData = new FormData();
       formData.append("source_name", sourceName);
-      formData.append("file", sourceFile);
+      formData.append("file", fileToImport);
       const response = await axios.post(`${apiBase}/api/gpo/import`, formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
@@ -86,6 +87,17 @@ export default function GPOImport({ apiBase, onBenchmarkContextChange, onPolicyI
       }
     } catch (err) {
       setError(extractApiError(err, "Failed to queue GPO import"));
+    } finally {
+      setIsImportingSource(false);
+    }
+  };
+
+  const onSourceFileSelected = async (event) => {
+    const selected = event.target.files?.[0] || null;
+    setSourceFile(selected);
+    event.target.value = "";
+    if (selected) {
+      await importSource(selected);
     }
   };
 
@@ -98,10 +110,12 @@ export default function GPOImport({ apiBase, onBenchmarkContextChange, onPolicyI
         <TextField label="Source Name" value={sourceName} onChange={(event) => setSourceName(event.target.value)} fullWidth />
         <Button component="label" variant="outlined">
           {sourceFile ? `Selected: ${sourceFile.name}` : "Choose Policy Source File"}
-          <input type="file" hidden accept=".xml,.inf,.pol,.txt" onChange={(event) => setSourceFile(event.target.files?.[0] || null)} />
+          <input type="file" hidden accept=".xml,.inf,.pol,.txt" onChange={onSourceFileSelected} />
         </Button>
-        {!sourceFile && <Alert severity="warning">Step 1 requires a policy source file before queueing import.</Alert>}
-        <Button variant="contained" onClick={importSource} disabled={!canQueueSource}>Queue Policy Import</Button>
+        <Alert severity="info">
+          Selecting a file automatically queues import.
+        </Alert>
+        {isImportingSource && <Alert severity="info">Queueing policy import...</Alert>}
 
         <Typography variant="h6" sx={{ pt: 2 }}>Step 2: Select Uploaded Benchmark</Typography>
         <Alert severity="info">Benchmark files are managed in Benchmark Workflow. Pick one uploaded benchmark to scope assessment defaults.</Alert>
