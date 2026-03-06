@@ -31,6 +31,7 @@ func RegisterRoutes(r *gin.Engine, h *handlers.Handler) {
 	r.POST("/api/gpo/assess", h.RunGPOAssessment)
 
 	r.POST("/api/upload", h.UploadFile)
+	r.POST("/upload", h.UploadFile)
 	r.PUT("/uploads/:id/tag", h.TagUpload)
 	r.DELETE("/uploads/:id", h.DeleteUpload)
 	r.DELETE("/reports/:report_id", h.DeleteReport)

@@ -36,6 +36,29 @@ export default function UploadBenchmarks({ apiBase }) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
+  const extractApiError = (requestError, fallback) => {
+    const data = requestError?.response?.data;
+    const status = requestError?.response?.status;
+    if (typeof data?.error === "string" && data.error.trim()) {
+      return status ? `${data.error} (HTTP ${status})` : data.error;
+    }
+    if (requestError?.request && !requestError?.response) {
+      return `${fallback}: API not reachable at ${apiBase}`;
+    }
+    return fallback;
+  };
+
+  const requestWithFallback = async (method, primaryPath, secondaryPath, data, config = {}) => {
+    try {
+      return await axios({ method, url: `${apiBase}${primaryPath}`, data, ...config });
+    } catch (primaryError) {
+      if (primaryError?.response?.status !== 404 || !secondaryPath) {
+        throw primaryError;
+      }
+      return axios({ method, url: `${apiBase}${secondaryPath}`, data, ...config });
+    }
+  };
+
   const loadUploads = async () => {
     try {
       const catalog = await fetchWorkflowCatalog(apiBase);
@@ -99,12 +122,12 @@ export default function UploadBenchmarks({ apiBase }) {
       }
 
       try {
-        await axios.post(`${apiBase}/api/upload`, formData, {
+        await requestWithFallback("post", "/api/upload", "/upload", formData, {
           headers: { "Content-Type": "multipart/form-data" },
         });
         uploadedCount += 1;
       } catch (uploadError) {
-        const reason = uploadError?.response?.data?.error || "upload failed";
+        const reason = extractApiError(uploadError, "upload failed");
         failures.push(`${selectedFile.name}: ${reason}`);
       }
     }
@@ -131,7 +154,7 @@ export default function UploadBenchmarks({ apiBase }) {
     setMessage("");
 
     try {
-      const response = await axios.put(`${apiBase}/uploads/${uploadId}/tag`, {
+      const response = await requestWithFallback("put", `/uploads/${uploadId}/tag`, null, {
         framework: edit.framework,
         version: edit.version,
       });
@@ -139,7 +162,7 @@ export default function UploadBenchmarks({ apiBase }) {
       setMessage(`Saved metadata for upload #${uploadId}${matchInfo}`);
       loadUploads();
     } catch (tagError) {
-      setError(tagError?.response?.data?.error || "Failed to save metadata.");
+      setError(extractApiError(tagError, "Failed to save metadata"));
     }
   };
 
@@ -148,7 +171,7 @@ export default function UploadBenchmarks({ apiBase }) {
     setMessage("");
 
     try {
-      const response = await axios.put(`${apiBase}/uploads/${uploadId}/tag`, {
+      const response = await requestWithFallback("put", `/uploads/${uploadId}/tag`, null, {
         framework: "",
         version: "",
       });
@@ -156,7 +179,7 @@ export default function UploadBenchmarks({ apiBase }) {
       setMessage(`Auto-tagged upload #${uploadId}${matchInfo}`);
       loadUploads();
     } catch (tagError) {
-      setError(tagError?.response?.data?.error || "Auto-tag failed.");
+      setError(extractApiError(tagError, "Auto-tag failed"));
     }
   };
 
@@ -168,14 +191,14 @@ export default function UploadBenchmarks({ apiBase }) {
     setError("");
     setMessage("");
     try {
-      const response = await axios.delete(`${apiBase}/uploads/${uploadId}`, {
+      const response = await requestWithFallback("delete", `/uploads/${uploadId}`, null, null, {
         params: { purge: purgeOnDelete },
       });
       const purgeInfo = response.data.purged_version ? " and purged parsed version data" : "";
       setMessage(`Deleted upload #${uploadId}${purgeInfo}.`);
       loadUploads();
     } catch (deleteError) {
-      setError(deleteError?.response?.data?.error || "Delete failed.");
+      setError(extractApiError(deleteError, "Delete failed"));
     }
   };
 
