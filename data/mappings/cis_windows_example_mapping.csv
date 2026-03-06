@@ -1,0 +1,5 @@
+rule_id,benchmark_ref,title,description,setting_key,check_type,expected_value,severity,source_label
+18.1.1,L1,"Turn off multicast name resolution","LLMNR should be disabled","turn_off_multicast_name_resolution",boolean,true,high,"CIS Windows 11 v2.0.0"
+18.2.2,L1,"Minimum password length","Minimum password length should be at least 14","minimum_password_length",numeric_threshold,"{""min"":14}",high,"CIS Windows 11 v2.0.0"
+18.3.3,L1,"Allow local log on","Allowed principals must include Administrators and Users","allow_local_log_on",set_membership,"{""values"":[""administrators"",""users""]}",medium,"CIS Windows 11 v2.0.0"
+18.4.4,L2,"Interactive logon banner text","Banner text should match approved value","interactive_logon_message_text",exact,"Authorized users only",low,"CIS Windows 11 v2.0.0"

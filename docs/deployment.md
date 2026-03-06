@@ -13,6 +13,7 @@ docker compose up --build
 - `docker/Dockerfile.api`
 - `docker/Dockerfile.parser`
 - `docker/Dockerfile.diff`
+- `docker/Dockerfile.gpo`
 - `frontend/Dockerfile`
 - `docker/Dockerfile.collector` (optional collector profile)
 
@@ -46,5 +47,6 @@ cd api && go test ./...
 ```bash
 pip install -r parser/requirements.txt
 pip install -r diff-engine/requirements.txt
+pip install -r gpo-assessment/requirements.txt
 pytest
 ```

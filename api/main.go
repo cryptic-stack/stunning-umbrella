@@ -4,6 +4,8 @@ import (
 	"context"
 	"log"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/example/cis-benchmark-intelligence/api/handlers"
@@ -20,6 +22,34 @@ func envOrDefault(key, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func envInt64OrDefault(key string, fallback int64) int64 {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+	return parsed
+}
+
+func parseAllowedOrigins(raw string) []string {
+	parts := strings.Split(raw, ",")
+	origins := make([]string, 0, len(parts))
+	for _, part := range parts {
+		origin := strings.TrimSpace(part)
+		if origin == "" {
+			continue
+		}
+		if origin == "*" {
+			continue
+		}
+		origins = append(origins, origin)
+	}
+	return origins
 }
 
 func main() {
@@ -50,10 +80,24 @@ func main() {
 	if err != nil {
 		log.Fatalf("auth middleware initialization failed: %v", err)
 	}
+	rbacMiddleware := NewRBACMiddleware(db)
 
 	r := gin.Default()
-	r.Use(cors.Default())
-	RegisterRoutes(r, h, authMiddleware.RequireAuth())
+	r.MaxMultipartMemory = envInt64OrDefault("UPLOAD_MAX_BYTES", 20*1024*1024)
+
+	allowedOrigins := parseAllowedOrigins(os.Getenv("CORS_ALLOWED_ORIGINS"))
+	if len(allowedOrigins) == 0 {
+		log.Fatal("CORS_ALLOWED_ORIGINS must include at least one explicit origin for internet-exposed deployments")
+	}
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     allowedOrigins,
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Authorization", "Content-Type"},
+		ExposeHeaders:    []string{"Content-Disposition"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
+	RegisterRoutes(r, h, authMiddleware.RequireAuth(), rbacMiddleware.RequireRoles)
 
 	if err := r.Run(":" + port); err != nil {
 		log.Fatalf("api failed to start: %v", err)

@@ -5,3 +5,4 @@
 - [Parser Format](parser-format.md)
 - [Diff Logic](diff-logic.md)
 - [Deployment](deployment.md)
+- [GPO Assessment](gpo-assessment.md)

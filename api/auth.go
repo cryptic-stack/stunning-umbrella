@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"os"
 	"strings"
@@ -10,13 +11,23 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const (
+	contextAuthDisabledKey = "auth_disabled"
+	contextPrincipalKey    = "auth_principal"
+)
+
+type AuthPrincipal struct {
+	Subject string
+	Email   string
+}
+
 type AuthMiddleware struct {
 	enabled  bool
 	verifier *oidc.IDTokenVerifier
 }
 
 func NewAuthMiddleware(ctx context.Context) (*AuthMiddleware, error) {
-	enabled := strings.EqualFold(os.Getenv("AUTH_ENABLED"), "true")
+	enabled := !strings.EqualFold(strings.TrimSpace(os.Getenv("AUTH_ENABLED")), "false")
 	if !enabled {
 		return &AuthMiddleware{enabled: false}, nil
 	}
@@ -24,7 +35,7 @@ func NewAuthMiddleware(ctx context.Context) (*AuthMiddleware, error) {
 	issuer := os.Getenv("OIDC_ISSUER_URL")
 	clientID := os.Getenv("OIDC_CLIENT_ID")
 	if issuer == "" || clientID == "" {
-		return &AuthMiddleware{enabled: false}, nil
+		return nil, errors.New("AUTH_ENABLED is true but OIDC_ISSUER_URL or OIDC_CLIENT_ID is missing")
 	}
 
 	provider, err := oidc.NewProvider(ctx, issuer)
@@ -43,6 +54,7 @@ func NewAuthMiddleware(ctx context.Context) (*AuthMiddleware, error) {
 func (a *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 	if a == nil || !a.enabled || a.verifier == nil {
 		return func(c *gin.Context) {
+			c.Set(contextAuthDisabledKey, true)
 			c.Next()
 		}
 	}
@@ -54,10 +66,40 @@ func (a *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 			return
 		}
 		token := strings.TrimSpace(header[len("Bearer "):])
-		if _, err := a.verifier.Verify(c.Request.Context(), token); err != nil {
+		idToken, err := a.verifier.Verify(c.Request.Context(), token)
+		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
 			return
 		}
+
+		claims := struct {
+			Subject string `json:"sub"`
+			Email   string `json:"email"`
+		}{}
+		if err := idToken.Claims(&claims); err != nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid token claims"})
+			return
+		}
+
+		email := strings.TrimSpace(strings.ToLower(claims.Email))
+		if email == "" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "token is missing email claim"})
+			return
+		}
+
+		c.Set(contextPrincipalKey, AuthPrincipal{
+			Subject: strings.TrimSpace(claims.Subject),
+			Email:   email,
+		})
 		c.Next()
 	}
+}
+
+func principalFromContext(c *gin.Context) (AuthPrincipal, bool) {
+	value, ok := c.Get(contextPrincipalKey)
+	if !ok {
+		return AuthPrincipal{}, false
+	}
+	principal, ok := value.(AuthPrincipal)
+	return principal, ok
 }

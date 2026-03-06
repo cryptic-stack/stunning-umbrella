@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,7 +11,9 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gocolly/colly/v2"
 )
@@ -63,11 +66,25 @@ func (s *CollectorService) scrapeIndex(indexURL string) error {
 }
 
 func (s *CollectorService) downloadFile(fileURL string) (string, error) {
-	resp, err := http.Get(fileURL)
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Get(fileURL)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("download failed with status %d", resp.StatusCode)
+	}
+
+	maxBytes := int64(50 * 1024 * 1024)
+	if raw := strings.TrimSpace(os.Getenv("COLLECTOR_MAX_DOWNLOAD_BYTES")); raw != "" {
+		if parsed, parseErr := strconv.ParseInt(raw, 10, 64); parseErr == nil && parsed > 0 {
+			maxBytes = parsed
+		}
+	}
+	if resp.ContentLength > 0 && resp.ContentLength > maxBytes {
+		return "", errors.New("download exceeds configured max size")
+	}
 
 	parsed, err := url.Parse(fileURL)
 	if err != nil {
@@ -86,8 +103,13 @@ func (s *CollectorService) downloadFile(fileURL string) (string, error) {
 	}
 	defer file.Close()
 
-	if _, err := io.Copy(file, resp.Body); err != nil {
+	written, err := io.Copy(file, io.LimitReader(resp.Body, maxBytes+1))
+	if err != nil {
 		return "", err
+	}
+	if written > maxBytes {
+		_ = os.Remove(storedPath)
+		return "", errors.New("download exceeded configured max size while streaming")
 	}
 
 	return storedPath, nil

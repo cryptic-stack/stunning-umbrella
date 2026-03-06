@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,6 +22,18 @@ var allowedUploadTypes = map[string]bool{
 	".xlsx": true,
 	".csv":  true,
 	".pdf":  true,
+}
+
+func uploadMaxBytes() int64 {
+	raw := strings.TrimSpace(os.Getenv("UPLOAD_MAX_BYTES"))
+	if raw == "" {
+		return 20 * 1024 * 1024
+	}
+	parsed, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || parsed <= 0 {
+		return 20 * 1024 * 1024
+	}
+	return parsed
 }
 
 func computeFileSHA256(path string) (string, error) {
@@ -114,8 +127,14 @@ func (h *Handler) ensureFrameworkAndVersion(frameworkName, versionLabel, sourceP
 }
 
 func (h *Handler) UploadFile(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, uploadMaxBytes())
+
 	file, err := c.FormFile("file")
 	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "request body too large") {
+			c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "file exceeds upload size limit"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": "file is required"})
 		return
 	}

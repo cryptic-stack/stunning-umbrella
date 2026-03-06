@@ -2,9 +2,10 @@
 
 ## Authentication
 
-- Disabled by default.
-- Enable OIDC verification with:
-  - `AUTH_ENABLED=true`
+- Enabled by default.
+- Disable only for local development with:
+  - `AUTH_ENABLED=false`
+- OIDC verification requires:
   - `OIDC_ISSUER_URL=<issuer-url>`
   - `OIDC_CLIENT_ID=<audience-client-id>`
 
@@ -12,7 +13,7 @@
 
 ### `GET /`
 
-Returns API status and a `frontend_url` field for the web app.
+Returns API status metadata.
 
 ### `POST /api/upload`
 
@@ -214,3 +215,69 @@ Use `"clear_role": true` to remove role assignment.
 ### `DELETE /settings/users/{id}`
 
 Deletes a user.
+
+## GPO Assessment Endpoints
+
+### `POST /api/gpo/import`
+
+Queues import of policy source exports.
+
+```json
+{
+  "source_type": "gpresult_xml",
+  "source_name": "Current RSOP",
+  "source_path": "/data/uploads/gpresult.xml"
+}
+```
+
+`source_type` values:
+
+- `gpresult_xml`
+- `gpmc_xml`
+- `secedit_inf`
+- `registry_pol`
+
+### `POST /api/gpo/mappings/import`
+
+Queues curated benchmark-to-policy mapping import from CSV or JSON.
+
+```json
+{
+  "mapping_path": "/data/mappings/cis_windows_example_mapping.csv",
+  "framework_id": 1,
+  "version_id": 2,
+  "mapping_label": "CIS Windows 11 v2.0.0"
+}
+```
+
+### `POST /api/gpo/assess`
+
+Queues a policy-vs-benchmark assessment run.
+
+```json
+{
+  "policy_source_id": 1,
+  "framework_id": 1,
+  "version_id": 2,
+  "mapping_label": "CIS Windows 11 v2.0.0"
+}
+```
+
+### `GET /api/gpo/assessments`
+
+Lists recent assessment runs.
+
+### `GET /api/gpo/assessments/{assessment_id}`
+
+Returns assessment metadata and detailed result rows.
+
+### `GET /api/gpo/assessments/{assessment_id}/report/{format}`
+
+Downloads generated exports in one of:
+
+- `json`
+- `md`
+- `html`
+- `csv`
+- `xlsx`
+- `docx`

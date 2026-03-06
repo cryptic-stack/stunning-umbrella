@@ -1,0 +1,10 @@
+FROM python:3.12-slim
+WORKDIR /app
+
+COPY gpo-assessment/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY gpo-assessment ./gpo-assessment
+WORKDIR /app/gpo-assessment
+
+CMD ["python", "worker.py"]

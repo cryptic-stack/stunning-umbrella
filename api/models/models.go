@@ -105,3 +105,70 @@ type AppUser struct {
 	IsActive    bool      `gorm:"not null;default:true" json:"is_active"`
 	CreatedAt   time.Time `json:"created_at"`
 }
+
+type PolicySource struct {
+	ID          uint       `gorm:"primaryKey" json:"id"`
+	SourceType  string     `gorm:"index;not null" json:"source_type"`
+	SourceName  string     `gorm:"not null;default:''" json:"source_name"`
+	Hostname    string     `gorm:"not null;default:''" json:"hostname"`
+	DomainName  string     `gorm:"not null;default:''" json:"domain_name"`
+	CollectedAt *time.Time `json:"collected_at"`
+	RawPath     string     `gorm:"not null;default:''" json:"raw_path"`
+	Metadata    string     `gorm:"type:jsonb;not null;default:'{}'" json:"metadata"`
+	CreatedAt   time.Time  `json:"created_at"`
+}
+
+type PolicySetting struct {
+	ID             uint      `gorm:"primaryKey" json:"id"`
+	PolicySourceID uint      `gorm:"index;not null" json:"policy_source_id"`
+	SettingKey     string    `gorm:"index;not null" json:"setting_key"`
+	SettingName    string    `gorm:"not null;default:''" json:"setting_name"`
+	CanonicalType  string    `gorm:"not null;default:''" json:"canonical_type"`
+	Scope          string    `gorm:"not null;default:''" json:"scope"`
+	ValueText      string    `gorm:"not null;default:''" json:"value_text"`
+	ValueNumber    *float64  `json:"value_number"`
+	ValueBool      *bool     `json:"value_bool"`
+	ValueJSON      string    `gorm:"type:jsonb;not null;default:'{}'" json:"value_json"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
+type BenchmarkPolicyRule struct {
+	ID            uint      `gorm:"primaryKey" json:"id"`
+	FrameworkID   *uint     `gorm:"index" json:"framework_id"`
+	VersionID     *uint     `gorm:"index" json:"version_id"`
+	RuleID        string    `gorm:"not null" json:"rule_id"`
+	BenchmarkRef  string    `gorm:"not null;default:''" json:"benchmark_ref"`
+	Title         string    `gorm:"not null;default:''" json:"title"`
+	Description   string    `gorm:"not null;default:''" json:"description"`
+	SettingKey    string    `gorm:"index;not null" json:"setting_key"`
+	CheckType     string    `gorm:"not null" json:"check_type"`
+	ExpectedValue string    `gorm:"type:jsonb;not null;default:'{}'" json:"expected_value"`
+	Severity      string    `gorm:"not null;default:''" json:"severity"`
+	SourceLabel   string    `gorm:"not null;default:''" json:"source_label"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+type AssessmentRun struct {
+	ID             uint       `gorm:"primaryKey" json:"id"`
+	PolicySourceID uint       `gorm:"index;not null" json:"policy_source_id"`
+	FrameworkID    *uint      `gorm:"index" json:"framework_id"`
+	VersionID      *uint      `gorm:"index" json:"version_id"`
+	MappingLabel   string     `gorm:"not null;default:''" json:"mapping_label"`
+	Status         string     `gorm:"index;not null;default:'queued'" json:"status"`
+	Error          string     `gorm:"not null;default:''" json:"error"`
+	CreatedAt      time.Time  `json:"created_at"`
+	CompletedAt    *time.Time `json:"completed_at"`
+}
+
+type AssessmentResult struct {
+	ID                    uint      `gorm:"primaryKey" json:"id"`
+	AssessmentRunID       uint      `gorm:"index;not null" json:"assessment_run_id"`
+	BenchmarkPolicyRuleID *uint     `gorm:"index" json:"benchmark_policy_rule_id"`
+	RuleID                string    `gorm:"not null;default:''" json:"rule_id"`
+	SettingKey            string    `gorm:"not null;default:''" json:"setting_key"`
+	Status                string    `gorm:"index;not null" json:"status"`
+	ActualValue           string    `gorm:"type:jsonb;not null;default:'{}'" json:"actual_value"`
+	ExpectedValue         string    `gorm:"type:jsonb;not null;default:'{}'" json:"expected_value"`
+	Details               string    `gorm:"not null;default:''" json:"details"`
+	CreatedAt             time.Time `json:"created_at"`
+}
