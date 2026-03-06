@@ -20,6 +20,7 @@ func RegisterRoutes(r *gin.Engine, h *handlers.Handler) {
 	r.GET("/reports/:report_id/download/:format", h.DownloadReport)
 	r.GET("/api/gpo/sources", h.ListGPOSources)
 	r.GET("/api/gpo/mappings", h.ListGPOMappings)
+	r.GET("/api/gpo/rules/count", h.CountGPORules)
 	r.GET("/api/gpo/assessments", h.ListGPOAssessments)
 	r.GET("/api/gpo/assessments/:assessment_id", h.GetGPOAssessment)
 	r.GET("/api/gpo/assessments/:assessment_id/report/:format", h.DownloadGPOAssessmentReport)

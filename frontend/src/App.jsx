@@ -31,7 +31,7 @@ export default function App() {
   const views = useMemo(
     () => [
       <BenchmarkWorkflow key="benchmark-workflow" apiBase={API_BASE} onReportCreated={setReportId} />,
-      <GPOWorkflow key="gpo-workflow" apiBase={API_BASE} />,
+      <GPOWorkflow key="gpo-workflow" apiBase={API_BASE} onOpenReports={() => setTab(2)} />,
       <ReportsHub key="reports" apiBase={API_BASE} reportId={reportId} onReportIdChange={setReportId} />,
     ],
     [reportId]

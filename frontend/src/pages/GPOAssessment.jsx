@@ -22,7 +22,7 @@ function extractApiError(err, fallbackMessage) {
   return fallbackMessage;
 }
 
-export default function GPOAssessment({ apiBase, benchmarkContext, refreshToken }) {
+export default function GPOAssessment({ apiBase, benchmarkContext, refreshToken, onOpenReports }) {
   const [sources, setSources] = useState([]);
   const [frameworks, setFrameworks] = useState([]);
   const [versions, setVersions] = useState([]);
@@ -30,6 +30,11 @@ export default function GPOAssessment({ apiBase, benchmarkContext, refreshToken 
   const [frameworkId, setFrameworkId] = useState("");
   const [versionId, setVersionId] = useState("");
   const [controlLevel, setControlLevel] = useState("ALL");
+  const [ruleCount, setRuleCount] = useState(0);
+  const [lastAssessmentId, setLastAssessmentId] = useState("");
+  const [assessmentStatus, setAssessmentStatus] = useState("");
+  const [assessmentSummary, setAssessmentSummary] = useState(null);
+  const [isRunning, setIsRunning] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -141,6 +146,75 @@ export default function GPOAssessment({ apiBase, benchmarkContext, refreshToken 
     return sources.find((item) => String(item.id) === String(policySourceId)) || null;
   }, [policySourceId, sources]);
 
+  const preflight = useMemo(
+    () => ({
+      hasSource: Boolean(policySourceId),
+      hasBenchmark: Boolean(frameworkId && versionId),
+      hasRules: ruleCount > 0,
+    }),
+    [policySourceId, frameworkId, versionId, ruleCount]
+  );
+
+  const canQueueAssessment = preflight.hasSource && preflight.hasBenchmark && preflight.hasRules && !isRunning;
+
+  const loadRuleCount = async () => {
+    if (!frameworkId || !versionId) {
+      setRuleCount(0);
+      return;
+    }
+    try {
+      const response = await axios.get(`${apiBase}/api/gpo/rules/count`, {
+        params: {
+          framework_id: frameworkId,
+          version_id: versionId,
+          control_level: controlLevel,
+        },
+      });
+      setRuleCount(Number(response.data?.rule_count || 0));
+    } catch {
+      setRuleCount(0);
+    }
+  };
+
+  useEffect(() => {
+    loadRuleCount();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [frameworkId, versionId, controlLevel]);
+
+  const pollAssessment = async (assessmentId, attempt = 1) => {
+    try {
+      const response = await axios.get(`${apiBase}/api/gpo/assessments/${assessmentId}`);
+      const assessment = response.data?.assessment || {};
+      const results = Array.isArray(response.data?.results) ? response.data.results : [];
+      const status = String(assessment.status || "").toLowerCase();
+      setAssessmentStatus(status || "queued");
+      if (status === "completed" || status === "failed") {
+        const counts = results.reduce((acc, item) => {
+          const key = String(item.status || "unknown");
+          acc[key] = (acc[key] || 0) + 1;
+          return acc;
+        }, {});
+        setAssessmentSummary(counts);
+        setIsRunning(false);
+        if (status === "completed") {
+          setMessage(`Assessment #${assessmentId} completed.`);
+        } else {
+          setError(String(assessment.error || "Assessment failed."));
+        }
+        return;
+      }
+      if (attempt >= 60) {
+        setIsRunning(false);
+        setMessage(`Assessment #${assessmentId} queued/running. Check Reports for completion.`);
+        return;
+      }
+      setTimeout(() => pollAssessment(assessmentId, attempt + 1), 2000);
+    } catch {
+      setIsRunning(false);
+      setMessage(`Assessment #${assessmentId} queued. Refresh Reports for latest status.`);
+    }
+  };
+
   const runAssessment = async () => {
     setMessage("");
     setError("");
@@ -153,19 +227,28 @@ export default function GPOAssessment({ apiBase, benchmarkContext, refreshToken 
       return;
     }
     try {
+      setIsRunning(true);
+      setAssessmentSummary(null);
+      setAssessmentStatus("queued");
       const response = await axios.post(`${apiBase}/api/gpo/assess`, {
         policy_source_id: Number(policySourceId),
         framework_id: Number(frameworkId),
         version_id: Number(versionId),
         control_level: controlLevel,
       });
-      setMessage(`Assessment queued: #${response.data.assessment_run_id}`);
+      const assessmentId = String(response.data.assessment_run_id || "");
+      setLastAssessmentId(assessmentId);
+      setMessage(`Assessment queued: #${assessmentId}`);
+      if (assessmentId) {
+        setTimeout(() => pollAssessment(assessmentId), 1500);
+      } else {
+        setIsRunning(false);
+      }
     } catch (err) {
+      setIsRunning(false);
       setError(extractApiError(err, "Failed to queue assessment"));
     }
   };
-
-  const canQueueAssessment = Boolean(policySourceId && frameworkId && versionId);
 
   return (
     <Paper sx={{ p: 3 }}>
@@ -194,6 +277,11 @@ export default function GPOAssessment({ apiBase, benchmarkContext, refreshToken 
             Could not resolve framework/version IDs for the selected benchmark. Re-tag that benchmark in Benchmark Workflow and refresh.
           </Alert>
         )}
+        {lastAssessmentId && (
+          <Alert severity={assessmentStatus === "failed" ? "error" : "info"}>
+            Assessment #{lastAssessmentId} status: {assessmentStatus || "queued"}
+          </Alert>
+        )}
 
         <FormControl fullWidth>
           <InputLabel id="cis-level-select-label">CIS Level</InputLabel>
@@ -209,11 +297,35 @@ export default function GPOAssessment({ apiBase, benchmarkContext, refreshToken 
           </Select>
         </FormControl>
 
+        <Typography variant="subtitle2">Preflight</Typography>
+        <Alert severity={preflight.hasSource ? "success" : "warning"}>
+          Policy source imported: {preflight.hasSource ? "Yes" : "No"}
+        </Alert>
+        <Alert severity={preflight.hasBenchmark ? "success" : "warning"}>
+          Benchmark resolved from Step 2: {preflight.hasBenchmark ? "Yes" : "No"}
+        </Alert>
+        <Alert severity={preflight.hasRules ? "success" : "warning"}>
+          Rules available for selected CIS level: {ruleCount}
+        </Alert>
+
         <Stack direction="row" spacing={1}>
-          <Button variant="outlined" onClick={loadChoices}>Refresh</Button>
-          <Button variant="contained" onClick={runAssessment} disabled={!canQueueAssessment}>Run Compare</Button>
+          <Button variant="outlined" onClick={() => { loadChoices(); loadRuleCount(); }}>Refresh</Button>
+          <Button variant="contained" onClick={runAssessment} disabled={!canQueueAssessment}>
+            {isRunning ? "Running..." : "Run Compare"}
+          </Button>
+          {onOpenReports && (
+            <Button variant="outlined" onClick={onOpenReports}>
+              Open Reports
+            </Button>
+          )}
         </Stack>
 
+        {assessmentSummary && (
+          <Alert severity="success">
+            Results: compliant {assessmentSummary.compliant || 0}, noncompliant {assessmentSummary.noncompliant || 0}, unknown{" "}
+            {assessmentSummary.unknown || 0}
+          </Alert>
+        )}
         {message && <Alert severity="success">{message}</Alert>}
         {error && <Alert severity="error">{error}</Alert>}
       </Stack>

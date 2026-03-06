@@ -75,6 +75,10 @@ type gpoMappingView struct {
 	RuleCount   int64  `json:"rule_count"`
 }
 
+type gpoRuleCountView struct {
+	RuleCount int64 `json:"rule_count"`
+}
+
 func (h *Handler) ImportGPO(c *gin.Context) {
 	var req gpoImportRequest
 	contentType := strings.ToLower(strings.TrimSpace(c.ContentType()))
@@ -287,6 +291,48 @@ ORDER BY source_label ASC
 		return
 	}
 	c.JSON(http.StatusOK, rows)
+}
+
+func (h *Handler) CountGPORules(c *gin.Context) {
+	frameworkID, frameworkErr := strconv.ParseUint(strings.TrimSpace(c.Query("framework_id")), 10, 64)
+	versionID, versionErr := strconv.ParseUint(strings.TrimSpace(c.Query("version_id")), 10, 64)
+	if frameworkErr != nil || versionErr != nil || frameworkID == 0 || versionID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "framework_id and version_id are required query params"})
+		return
+	}
+
+	controlLevel := strings.ToUpper(strings.TrimSpace(c.Query("control_level")))
+	if controlLevel == "" {
+		controlLevel = "ALL"
+	}
+	if controlLevel != "ALL" && controlLevel != "L1" && controlLevel != "L2" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "control_level must be ALL, L1, or L2"})
+		return
+	}
+
+	count := gpoRuleCountView{}
+	if err := h.DB.Raw(`
+SELECT COUNT(*) AS rule_count
+FROM benchmark_policy_rules
+WHERE framework_id = ?
+  AND version_id = ?
+  AND (
+    ? = 'ALL'
+    OR UPPER(COALESCE(severity, '')) = ?
+    OR UPPER(COALESCE(benchmark_ref, '')) LIKE ('%%' || ? || '%%')
+    OR UPPER(COALESCE(title, '')) LIKE ('%%' || ? || '%%')
+  )
+`, frameworkID, versionID, controlLevel, controlLevel, controlLevel, controlLevel).Scan(&count).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to count benchmark policy rules"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"framework_id":  frameworkID,
+		"version_id":    versionID,
+		"control_level": controlLevel,
+		"rule_count":    count.RuleCount,
+	})
 }
 
 func (h *Handler) GetGPOAssessment(c *gin.Context) {
