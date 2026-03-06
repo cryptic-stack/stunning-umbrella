@@ -21,7 +21,7 @@ function extractApiError(err, fallbackMessage) {
   return fallbackMessage;
 }
 
-export default function GPOAssessment({ apiBase }) {
+export default function GPOAssessment({ apiBase, benchmarkContext }) {
   const [sources, setSources] = useState([]);
   const [frameworks, setFrameworks] = useState([]);
   const [versions, setVersions] = useState([]);
@@ -100,6 +100,53 @@ export default function GPOAssessment({ apiBase }) {
     }
   }, [mappingLabel, mappings, versionId]);
 
+  useEffect(() => {
+    if (!benchmarkContext) {
+      return;
+    }
+
+    if (!frameworkId && benchmarkContext.framework) {
+      const matchedFramework = frameworks.find(
+        (item) => String(item.name || "").toLowerCase() === String(benchmarkContext.framework || "").toLowerCase()
+      );
+      if (matchedFramework) {
+        setFrameworkId(String(matchedFramework.id));
+      }
+    }
+  }, [benchmarkContext, frameworks, frameworkId]);
+
+  useEffect(() => {
+    if (!benchmarkContext?.version) {
+      return;
+    }
+    if (!versionId) {
+      const matchedVersion = versions.find((item) => String(item.version) === String(benchmarkContext.version));
+      if (matchedVersion) {
+        setVersionId(String(matchedVersion.id));
+      }
+    }
+  }, [benchmarkContext, versions, versionId]);
+
+  useEffect(() => {
+    if (!benchmarkContext || !mappings.length || mappingLabel) {
+      return;
+    }
+
+    const selectedFramework = frameworks.find((item) => String(item.id) === String(frameworkId));
+    const frameworkName = selectedFramework?.name || benchmarkContext.framework || "";
+    const versionText = benchmarkContext.version || "";
+
+    const candidate = mappings.find((item) => {
+      const sameFramework = !item.framework_id || frameworks.some((row) => String(row.id) === String(item.framework_id) && String(row.name).toLowerCase() === String(frameworkName).toLowerCase());
+      const sameVersion = !item.version_id || versions.some((row) => String(row.id) === String(item.version_id) && String(row.version) === String(versionText));
+      return sameFramework && sameVersion;
+    });
+
+    if (candidate?.source_label) {
+      setMappingLabel(candidate.source_label);
+    }
+  }, [benchmarkContext, frameworks, frameworkId, mappingLabel, mappings, versions]);
+
   const runAssessment = async () => {
     setMessage("");
     setError("");
@@ -131,6 +178,12 @@ export default function GPOAssessment({ apiBase }) {
     <Paper sx={{ p: 3 }}>
       <Stack spacing={2}>
         <Typography variant="h6">Step 3: Run Assessment</Typography>
+        {benchmarkContext && (
+          <Alert severity="info">
+            Benchmark context from Step 2: #{benchmarkContext.uploadId} {benchmarkContext.framework || "Unmapped"}{" "}
+            {benchmarkContext.version ? `v${benchmarkContext.version}` : "(no version)"}.
+          </Alert>
+        )}
         <Stack direction="row" spacing={1}>
           <Button variant="outlined" onClick={loadChoices}>Refresh Sources/Mappings</Button>
         </Stack>

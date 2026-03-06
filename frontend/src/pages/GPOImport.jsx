@@ -21,49 +21,50 @@ function extractApiError(err, fallbackMessage) {
   return fallbackMessage;
 }
 
-export default function GPOImport({ apiBase }) {
+export default function GPOImport({ apiBase, onBenchmarkContextChange }) {
   const [sourceName, setSourceName] = useState("Current RSOP");
   const [sourceFile, setSourceFile] = useState(null);
-  const [mappingFile, setMappingFile] = useState(null);
-  const [frameworks, setFrameworks] = useState([]);
-  const [versions, setVersions] = useState([]);
-  const [frameworkId, setFrameworkId] = useState("");
-  const [versionId, setVersionId] = useState("");
-  const [mappingLabel, setMappingLabel] = useState("CIS Windows mapping");
+  const [uploads, setUploads] = useState([]);
+  const [selectedUploadId, setSelectedUploadId] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
   const canQueueSource = Boolean(sourceFile);
-  const canQueueMapping = Boolean(mappingFile) && Boolean(mappingLabel.trim());
+  const selectedUpload = uploads.find((item) => String(item.id) === String(selectedUploadId));
+
+  const loadUploads = async () => {
+    try {
+      const response = await axios.get(`${apiBase}/uploads`);
+      const rows = response.data || [];
+      setUploads(rows);
+      if (!selectedUploadId && rows.length > 0) {
+        setSelectedUploadId(String(rows[0].id));
+      }
+    } catch {
+      setUploads([]);
+    }
+  };
 
   useEffect(() => {
-    const loadFrameworks = async () => {
-      try {
-        const response = await axios.get(`${apiBase}/frameworks`);
-        setFrameworks(response.data || []);
-      } catch {
-        setFrameworks([]);
-      }
-    };
-    loadFrameworks();
+    loadUploads();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiBase]);
 
   useEffect(() => {
-    const loadVersions = async () => {
-      if (!frameworkId) {
-        setVersions([]);
-        setVersionId("");
-        return;
-      }
-      try {
-        const response = await axios.get(`${apiBase}/frameworks/${frameworkId}/versions`);
-        setVersions(response.data || []);
-      } catch {
-        setVersions([]);
-      }
-    };
-    loadVersions();
-  }, [apiBase, frameworkId]);
+    if (!onBenchmarkContextChange) {
+      return;
+    }
+    if (!selectedUpload) {
+      onBenchmarkContextChange(null);
+      return;
+    }
+    onBenchmarkContextChange({
+      uploadId: selectedUpload.id,
+      framework: selectedUpload.framework || selectedUpload.suggested_framework || "",
+      version: selectedUpload.version || selectedUpload.suggested_version || "",
+      filename: selectedUpload.filename || "",
+    });
+  }, [onBenchmarkContextChange, selectedUpload]);
 
   const importSource = async () => {
     setMessage("");
@@ -85,32 +86,6 @@ export default function GPOImport({ apiBase }) {
     }
   };
 
-  const importMapping = async () => {
-    setMessage("");
-    setError("");
-    if (!mappingFile) {
-      setError("Choose a mapping file.");
-      return;
-    }
-    try {
-      const formData = new FormData();
-      formData.append("mapping_label", mappingLabel);
-      if (frameworkId) {
-        formData.append("framework_id", frameworkId);
-      }
-      if (versionId) {
-        formData.append("version_id", versionId);
-      }
-      formData.append("file", mappingFile);
-      const response = await axios.post(`${apiBase}/api/gpo/mappings/import`, formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      setMessage(response.data.message || "Mapping import queued");
-    } catch (err) {
-      setError(extractApiError(err, "Failed to queue mapping import"));
-    }
-  };
-
   return (
     <Paper sx={{ p: 3 }}>
       <Stack spacing={2}>
@@ -125,32 +100,38 @@ export default function GPOImport({ apiBase }) {
         {!sourceFile && <Alert severity="warning">Step 1 requires a policy source file before queueing import.</Alert>}
         <Button variant="contained" onClick={importSource} disabled={!canQueueSource}>Queue Policy Import</Button>
 
-        <Typography variant="h6" sx={{ pt: 2 }}>Step 2: Import Benchmark Mapping</Typography>
-        <Button component="label" variant="outlined">
-          {mappingFile ? `Selected: ${mappingFile.name}` : "Choose Mapping CSV/JSON"}
-          <input type="file" hidden accept=".csv,.json" onChange={(event) => setMappingFile(event.target.files?.[0] || null)} />
-        </Button>
+        <Typography variant="h6" sx={{ pt: 2 }}>Step 2: Select Uploaded Benchmark</Typography>
+        <Alert severity="info">Benchmark files are managed in Benchmark Workflow. Pick one uploaded benchmark to scope assessment defaults.</Alert>
+        <Stack direction="row" spacing={1}>
+          <Button variant="outlined" onClick={loadUploads}>Refresh Benchmarks</Button>
+        </Stack>
         <FormControl fullWidth>
-          <InputLabel id="framework-label">Framework</InputLabel>
-          <Select labelId="framework-label" label="Framework" value={frameworkId} onChange={(event) => setFrameworkId(event.target.value)}>
-            <MenuItem value=""><em>Any framework</em></MenuItem>
-            {frameworks.map((item) => (
-              <MenuItem key={item.id} value={String(item.id)}>{item.name}</MenuItem>
+          <InputLabel id="benchmark-select-label">Uploaded Benchmark</InputLabel>
+          <Select
+            labelId="benchmark-select-label"
+            label="Uploaded Benchmark"
+            value={selectedUploadId}
+            onChange={(event) => setSelectedUploadId(event.target.value)}
+          >
+            {uploads.map((item) => (
+              <MenuItem key={item.id} value={String(item.id)}>
+                #{item.id} {item.framework || item.suggested_framework || "Unmapped"} {item.version ? `v${item.version}` : ""} - {item.filename}
+              </MenuItem>
             ))}
+            {uploads.length === 0 && (
+              <MenuItem value="" disabled>
+                No uploaded benchmarks found
+              </MenuItem>
+            )}
           </Select>
         </FormControl>
-        <FormControl fullWidth disabled={!frameworkId}>
-          <InputLabel id="version-label">Version</InputLabel>
-          <Select labelId="version-label" label="Version" value={versionId} onChange={(event) => setVersionId(event.target.value)}>
-            <MenuItem value=""><em>Any version</em></MenuItem>
-            {versions.map((item) => (
-              <MenuItem key={item.id} value={String(item.id)}>{item.version}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        <TextField label="Mapping Label" value={mappingLabel} onChange={(event) => setMappingLabel(event.target.value)} fullWidth />
-        {!canQueueMapping && <Alert severity="warning">Step 2 requires both a mapping file and mapping label.</Alert>}
-        <Button variant="contained" onClick={importMapping} disabled={!canQueueMapping}>Queue Mapping Import</Button>
+        {selectedUpload && (
+          <Alert severity="success">
+            Selected benchmark #{selectedUpload.id}: {selectedUpload.framework || selectedUpload.suggested_framework || "Unmapped"}{" "}
+            {selectedUpload.version ? `v${selectedUpload.version}` : "(no version)"}.
+          </Alert>
+        )}
+        {!selectedUpload && <Alert severity="warning">Select an uploaded benchmark to continue with assessment defaults.</Alert>}
 
         {message && <Alert severity="success">{message}</Alert>}
         {error && <Alert severity="error">{error}</Alert>}

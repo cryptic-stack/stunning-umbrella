@@ -42,10 +42,9 @@ The `gpo-assessment` module imports Windows policy exports, normalizes settings,
    Source type is auto-discovered from file content/extension.
    Choose policy source file (`gpresult.xml` first).
    Click `Queue Policy Import`.
-3. In **Step 2: Import Benchmark Mapping**:
-   Choose mapping CSV/JSON file.
-   Select `Framework` and `Version` from dropdowns (optional but recommended).
-   Click `Queue Mapping Import`.
+3. In **Step 2: Select Uploaded Benchmark**:
+   Pick an already uploaded benchmark from Benchmark Workflow.
+   This drives framework/version defaults for assessment.
 4. In the same `GPO Workflow` page, use **Step 3: Run Assessment**:
    Select `Policy Source`, `Framework`, `Version`, and `Mapping Label` from dropdowns.
    Click `Queue Assessment`.
