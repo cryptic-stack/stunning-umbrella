@@ -72,7 +72,7 @@ Role model:
 
 ## GPO Assessment Endpoints
 
-- `POST /api/gpo/import` (queue policy source import: `gpresult_xml`, `gpmc_xml`, `secedit_inf`, `registry_pol`)
+- `POST /api/gpo/import` (queue policy source import with automatic source-type discovery; optional `source_type` override supports `gpresult_xml`, `gpmc_xml`, `secedit_inf`, `registry_pol`)
 - `POST /api/gpo/mappings/import` (queue curated benchmark mapping import from CSV/JSON)
 - `POST /api/gpo/assess` (queue assessment run)
 - `GET /api/gpo/assessments`

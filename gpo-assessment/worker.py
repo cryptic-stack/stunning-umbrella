@@ -9,6 +9,7 @@ import redis
 
 from comparator.compare import run_assessment
 from db import db_cursor, replace_policy_settings, upsert_policy_source
+from importer.detect import detect_source_type
 from importer.gpmc_xml import parse_gpmc_xml
 from importer.gpresult_xml import parse_gpresult_xml
 from importer.registry_pol import parse_registry_pol
@@ -18,11 +19,14 @@ from reporter.report import export_assessment_report
 
 
 def _import_policy_source(payload: dict) -> dict:
-    source_type = (payload.get("source_type") or "gpresult_xml").strip().lower()
-    source_name = (payload.get("source_name") or "").strip()
     source_path = payload.get("source_path") or ""
     if not source_path:
         raise ValueError("source_path is required")
+    source_type = detect_source_type(
+        path=source_path,
+        declared_type=(payload.get("source_type") or ""),
+    )
+    source_name = (payload.get("source_name") or "").strip()
 
     if source_type == "gpresult_xml":
         settings = parse_gpresult_xml(source_path)
@@ -147,4 +151,3 @@ def run_worker() -> None:
 
 if __name__ == "__main__":
     run_worker()
-

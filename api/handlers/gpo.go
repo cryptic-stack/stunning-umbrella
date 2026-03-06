@@ -105,14 +105,13 @@ func (h *Handler) ImportGPO(c *gin.Context) {
 	}
 
 	sourceType := strings.ToLower(strings.TrimSpace(req.SourceType))
-	if sourceType == "" {
-		sourceType = "gpresult_xml"
-	}
-	switch sourceType {
-	case "gpresult_xml", "gpmc_xml", "secedit_inf", "registry_pol":
-	default:
-		c.JSON(http.StatusBadRequest, gin.H{"error": "source_type must be gpresult_xml, gpmc_xml, secedit_inf, or registry_pol"})
-		return
+	if sourceType != "" {
+		switch sourceType {
+		case "gpresult_xml", "gpmc_xml", "secedit_inf", "registry_pol":
+		default:
+			c.JSON(http.StatusBadRequest, gin.H{"error": "source_type must be gpresult_xml, gpmc_xml, secedit_inf, or registry_pol"})
+			return
+		}
 	}
 	if strings.TrimSpace(req.SourcePath) == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "source_path is required"})
@@ -134,7 +133,16 @@ func (h *Handler) ImportGPO(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusAccepted, gin.H{"message": "gpo import queued", "job_type": "import_policy_source", "source_type": sourceType})
+	reportedType := sourceType
+	if reportedType == "" {
+		reportedType = "auto"
+	}
+	c.JSON(http.StatusAccepted, gin.H{
+		"message":       "gpo import queued",
+		"job_type":      "import_policy_source",
+		"source_type":   reportedType,
+		"auto_discover": sourceType == "",
+	})
 }
 
 func (h *Handler) ImportGPOMappings(c *gin.Context) {

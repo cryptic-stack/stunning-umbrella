@@ -2,15 +2,7 @@ import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { Alert, Button, FormControl, InputLabel, MenuItem, Paper, Select, Stack, TextField, Typography } from "@mui/material";
 
-const sourceTypes = [
-  { value: "gpresult_xml", label: "GPResult XML" },
-  { value: "gpmc_xml", label: "GPMC XML" },
-  { value: "secedit_inf", label: "Secedit INF" },
-  { value: "registry_pol", label: "Registry.pol" },
-];
-
 export default function GPOImport({ apiBase }) {
-  const [sourceType, setSourceType] = useState("gpresult_xml");
   const [sourceName, setSourceName] = useState("Current RSOP");
   const [sourceFile, setSourceFile] = useState(null);
   const [mappingFile, setMappingFile] = useState(null);
@@ -60,7 +52,6 @@ export default function GPOImport({ apiBase }) {
     }
     try {
       const formData = new FormData();
-      formData.append("source_type", sourceType);
       formData.append("source_name", sourceName);
       formData.append("file", sourceFile);
       const response = await axios.post(`${apiBase}/api/gpo/import`, formData, {
@@ -102,14 +93,7 @@ export default function GPOImport({ apiBase }) {
     <Paper sx={{ p: 3 }}>
       <Stack spacing={2}>
         <Typography variant="h6">Step 1: Import Policy Source</Typography>
-        <FormControl fullWidth>
-          <InputLabel id="source-type-label">Source Type</InputLabel>
-          <Select labelId="source-type-label" label="Source Type" value={sourceType} onChange={(event) => setSourceType(event.target.value)}>
-            {sourceTypes.map((item) => (
-              <MenuItem key={item.value} value={item.value}>{item.label}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+        <Alert severity="info">Source type is auto-discovered from the uploaded file.</Alert>
         <TextField label="Source Name" value={sourceName} onChange={(event) => setSourceName(event.target.value)} fullWidth />
         <Button component="label" variant="outlined">
           {sourceFile ? `Selected: ${sourceFile.name}` : "Choose Policy Source File"}
@@ -149,4 +133,3 @@ export default function GPOImport({ apiBase }) {
     </Paper>
   );
 }
-

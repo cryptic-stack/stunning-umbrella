@@ -39,7 +39,7 @@ The `gpo-assessment` module imports Windows policy exports, normalizes settings,
 
 1. Open `GPO Workflow` tab.
 2. In **Step 1: Import Policy Source**:
-   Select `Source Type` from dropdown.
+   Source type is auto-discovered from file content/extension.
    Choose policy source file (`gpresult.xml` first).
    Click `Queue Policy Import`.
 3. In **Step 2: Import Benchmark Mapping**:

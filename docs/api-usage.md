@@ -224,13 +224,13 @@ Queues import of policy source exports.
 
 ```json
 {
-  "source_type": "gpresult_xml",
   "source_name": "Current RSOP",
   "source_path": "/data/uploads/gpresult.xml"
 }
 ```
 
-`source_type` values:
+`source_type` is optional. If omitted, the service auto-discovers file type from extension/content.
+Supported values when explicitly provided:
 
 - `gpresult_xml`
 - `gpmc_xml`
