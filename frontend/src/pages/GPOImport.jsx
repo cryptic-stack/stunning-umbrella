@@ -33,15 +33,34 @@ export default function GPOImport({ apiBase, onBenchmarkContextChange, onPolicyI
   const selectedUpload = uploads.find((item) => String(item.id) === String(selectedUploadId));
 
   const loadUploads = async () => {
+    setError("");
     try {
-      const response = await axios.get(`${apiBase}/api/uploads`);
-      const rows = response.data || [];
-      setUploads(rows);
-      if (!selectedUploadId && rows.length > 0) {
-        setSelectedUploadId(String(rows[0].id));
+      let rows = [];
+      try {
+        const response = await axios.get(`${apiBase}/api/uploads`);
+        rows = response.data || [];
+      } catch (primaryErr) {
+        // Compatibility fallback for deployments without /api alias paths.
+        const fallbackResponse = await axios.get(`${apiBase}/uploads`);
+        rows = fallbackResponse.data || [];
+        if (!rows.length) {
+          throw primaryErr;
+        }
       }
+
+      setUploads(rows);
+      setSelectedUploadId((previous) => {
+        if (!rows.length) {
+          return "";
+        }
+        if (rows.some((item) => String(item.id) === String(previous))) {
+          return previous;
+        }
+        return String(rows[0].id);
+      });
     } catch {
       setUploads([]);
+      setSelectedUploadId("");
       setError("Failed to load uploaded benchmarks for Step 2.");
     }
   };
