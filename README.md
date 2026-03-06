@@ -17,6 +17,12 @@ CIS Benchmark Intelligence ingests CIS benchmark source files (`.xlsx`, `.csv`, 
 docker compose up --build
 ```
 
+UI workflow tabs:
+
+- `Benchmark Workflow` (upload + tag + compare)
+- `Reports` (Diff Viewer + GPO Reports)
+- `GPO Workflow` (policy import + mapping import + assessment)
+
 Services:
 
 - API: `http://localhost:8080`

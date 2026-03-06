@@ -55,6 +55,15 @@ The `gpo-assessment` module imports Windows policy exports, normalizes settings,
    Click `Load Assessment Details`.
    Download exports from table links (`DOCX`, `XLSX`, etc.).
 
+## Benchmark workflow alignment
+
+The benchmark process uses the same simplified pattern:
+
+1. Open `Benchmark Workflow`.
+2. Upload/tag benchmark files in Step 1 section.
+3. Run version comparison in Step 2 section (dropdown-led framework/version selection).
+4. Open `Reports` -> `Diff Viewer` to review/export benchmark diffs.
+
 ## Notes
 
 - `gpresult_xml` is the primary import path for milestone 1.

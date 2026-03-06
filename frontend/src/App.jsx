@@ -1,11 +1,10 @@
 import React, { useMemo, useState } from "react";
 import { AppBar, Box, Container, CssBaseline, Tab, Tabs, Toolbar, Typography } from "@mui/material";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
-import UploadBenchmarks from "./pages/UploadBenchmarks";
-import VersionComparison from "./pages/VersionComparison";
 import Settings from "./pages/Settings";
 import ReportsHub from "./pages/ReportsHub";
 import GPOWorkflow from "./pages/GPOWorkflow";
+import BenchmarkWorkflow from "./pages/BenchmarkWorkflow";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
 const appTheme = createTheme({
@@ -20,8 +19,7 @@ export default function App() {
 
   const views = useMemo(
     () => [
-      <UploadBenchmarks key="upload" apiBase={API_BASE} />,
-      <VersionComparison key="compare" apiBase={API_BASE} onReportCreated={setReportId} />,
+      <BenchmarkWorkflow key="benchmark-workflow" apiBase={API_BASE} onReportCreated={setReportId} />,
       <ReportsHub key="reports" apiBase={API_BASE} reportId={reportId} onReportIdChange={setReportId} />,
       <Settings key="settings" apiBase={API_BASE} />,
       <GPOWorkflow key="gpo-workflow" apiBase={API_BASE} />,
@@ -42,8 +40,7 @@ export default function App() {
       <Container maxWidth="lg" sx={{ py: 3 }}>
         <Box sx={{ borderBottom: 1, borderColor: "divider", mb: 2 }}>
           <Tabs value={tab} onChange={(_, value) => setTab(value)}>
-            <Tab label="Upload Benchmarks" />
-            <Tab label="Version Comparison" />
+            <Tab label="Benchmark Workflow" />
             <Tab label="Reports" />
             <Tab label="Settings" />
             <Tab label="GPO Workflow" />

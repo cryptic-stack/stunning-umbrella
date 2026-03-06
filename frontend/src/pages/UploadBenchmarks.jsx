@@ -4,8 +4,12 @@ import {
   Alert,
   Button,
   Checkbox,
+  FormControl,
   FormControlLabel,
+  InputLabel,
+  MenuItem,
   Paper,
+  Select,
   Stack,
   Table,
   TableBody,
@@ -19,6 +23,9 @@ import FileDropzone from "../components/FileDropzone";
 
 export default function UploadBenchmarks({ apiBase }) {
   const [framework, setFramework] = useState("CIS Controls");
+  const [frameworks, setFrameworks] = useState([]);
+  const [useCustomFramework, setUseCustomFramework] = useState(false);
+  const [customFramework, setCustomFramework] = useState("");
   const [version, setVersion] = useState("");
   const [releaseDate, setReleaseDate] = useState("");
   const [isUploading, setIsUploading] = useState(false);
@@ -30,9 +37,13 @@ export default function UploadBenchmarks({ apiBase }) {
 
   const loadUploads = async () => {
     try {
-      const response = await axios.get(`${apiBase}/uploads`);
-      const rows = response.data || [];
+      const [uploadRes, frameworkRes] = await Promise.all([
+        axios.get(`${apiBase}/uploads`),
+        axios.get(`${apiBase}/frameworks`),
+      ]);
+      const rows = uploadRes.data || [];
       setUploads(rows);
+      setFrameworks(frameworkRes.data || []);
       setTagEdits((prev) => {
         const next = { ...prev };
         for (const row of rows) {
@@ -47,6 +58,7 @@ export default function UploadBenchmarks({ apiBase }) {
       });
     } catch {
       setUploads([]);
+      setFrameworks([]);
     }
   };
 
@@ -68,10 +80,11 @@ export default function UploadBenchmarks({ apiBase }) {
     let uploadedCount = 0;
     const failures = [];
 
+    const selectedFramework = useCustomFramework ? customFramework : framework;
     for (const selectedFile of files) {
       const formData = new FormData();
       formData.append("file", selectedFile);
-      formData.append("framework", framework);
+      formData.append("framework", selectedFramework);
       formData.append("version", version);
       if (releaseDate) {
         formData.append("release_date", releaseDate);
@@ -162,7 +175,39 @@ export default function UploadBenchmarks({ apiBase }) {
     <Paper sx={{ p: 3 }}>
       <Stack spacing={2}>
         <Typography variant="h6">Upload Benchmarks</Typography>
-        <TextField label="Framework" value={framework} onChange={(event) => setFramework(event.target.value)} fullWidth />
+        <FormControl fullWidth>
+          <InputLabel id="framework-select-label">Framework</InputLabel>
+          <Select
+            labelId="framework-select-label"
+            label="Framework"
+            value={useCustomFramework ? "__custom__" : framework}
+            onChange={(event) => {
+              const value = event.target.value;
+              if (value === "__custom__") {
+                setUseCustomFramework(true);
+                return;
+              }
+              setUseCustomFramework(false);
+              setFramework(value);
+            }}
+          >
+            <MenuItem value="CIS Controls">CIS Controls</MenuItem>
+            {frameworks.map((item) => (
+              <MenuItem key={item.id} value={item.name}>
+                {item.name}
+              </MenuItem>
+            ))}
+            <MenuItem value="__custom__">Custom Framework</MenuItem>
+          </Select>
+        </FormControl>
+        {useCustomFramework && (
+          <TextField
+            label="Custom Framework"
+            value={customFramework}
+            onChange={(event) => setCustomFramework(event.target.value)}
+            fullWidth
+          />
+        )}
         <TextField label="Version (optional, auto-detected if blank)" value={version} onChange={(event) => setVersion(event.target.value)} fullWidth />
         <TextField
           label="Release Date"
