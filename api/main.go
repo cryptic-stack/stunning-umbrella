@@ -35,20 +35,22 @@ func envInt64OrDefault(key string, fallback int64) int64 {
 	return parsed
 }
 
-func parseAllowedOrigins(raw string) []string {
+func parseAllowedOrigins(raw string) ([]string, bool) {
 	parts := strings.Split(raw, ",")
 	origins := make([]string, 0, len(parts))
+	allowAll := false
 	for _, part := range parts {
 		origin := strings.TrimSpace(part)
 		if origin == "" {
 			continue
 		}
 		if origin == "*" {
+			allowAll = true
 			continue
 		}
 		origins = append(origins, origin)
 	}
-	return origins
+	return origins, allowAll
 }
 
 func main() {
@@ -79,18 +81,24 @@ func main() {
 	r := gin.Default()
 	r.MaxMultipartMemory = envInt64OrDefault("UPLOAD_MAX_BYTES", 20*1024*1024)
 
-	allowedOrigins := parseAllowedOrigins(os.Getenv("CORS_ALLOWED_ORIGINS"))
-	if len(allowedOrigins) == 0 {
-		log.Fatal("CORS_ALLOWED_ORIGINS must include at least one explicit origin for internet-exposed deployments")
+	allowedOrigins, allowAllOrigins := parseAllowedOrigins(os.Getenv("CORS_ALLOWED_ORIGINS"))
+	corsConfig := cors.Config{
+		AllowMethods:  []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:  []string{"Authorization", "Content-Type"},
+		ExposeHeaders: []string{"Content-Disposition"},
+		MaxAge:        12 * time.Hour,
 	}
-	r.Use(cors.New(cors.Config{
-		AllowOrigins:     allowedOrigins,
-		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders:     []string{"Authorization", "Content-Type"},
-		ExposeHeaders:    []string{"Content-Disposition"},
-		AllowCredentials: true,
-		MaxAge:           12 * time.Hour,
-	}))
+	if allowAllOrigins {
+		corsConfig.AllowAllOrigins = true
+		corsConfig.AllowCredentials = false
+	} else {
+		if len(allowedOrigins) == 0 {
+			log.Fatal("CORS_ALLOWED_ORIGINS must include at least one explicit origin or '*'.")
+		}
+		corsConfig.AllowOrigins = allowedOrigins
+		corsConfig.AllowCredentials = true
+	}
+	r.Use(cors.New(corsConfig))
 	RegisterRoutes(r, h)
 
 	if err := r.Run(":" + port); err != nil {
