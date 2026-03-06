@@ -260,7 +260,7 @@ export default function UploadBenchmarks({ apiBase }) {
           InputLabelProps={{ shrink: true }}
           fullWidth
         />
-        <FileDropzone onFilesSelected={uploadSelectedFiles} accepted=".xlsx,.csv,.pdf" disabled={isUploading} />
+        <FileDropzone onFilesSelected={uploadSelectedFiles} accepted=".xlsx,.xlsm,.csv,.pdf" disabled={isUploading} />
         {message && <Alert severity="success">{message}</Alert>}
         {error && <Alert severity="error">{error}</Alert>}
 

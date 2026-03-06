@@ -36,7 +36,7 @@ def get_db_connection():
 
 def normalize_file(path: str, framework: str, version: str) -> List[CanonicalSafeguard]:
     ext = Path(path).suffix.lower()
-    if ext in {".xlsx", ".csv"}:
+    if ext in {".xlsx", ".xlsm", ".csv"}:
         return parse_excel(path, framework, version)
     if ext == ".pdf":
         return parse_pdf(path, framework, version)

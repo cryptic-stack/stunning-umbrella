@@ -18,6 +18,7 @@ import (
 
 var allowedUploadTypes = map[string]bool{
 	".xlsx": true,
+	".xlsm": true,
 	".csv":  true,
 	".pdf":  true,
 }
