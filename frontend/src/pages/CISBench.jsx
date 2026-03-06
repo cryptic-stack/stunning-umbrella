@@ -52,6 +52,20 @@ export default function CISBench({ apiBase }) {
   const progressIntervalRef = useRef(null);
   const progressCompletionRef = useRef(null);
 
+  const cisBenchRequest = async (method, path, data, config = {}) => {
+    const primaryUrl = `${apiBase}/cis-bench${path}`;
+    const legacyUrl = `${apiBase}/testing/cis-bench${path}`;
+    try {
+      return await axios({ method, url: primaryUrl, data, ...config });
+    } catch (primaryError) {
+      const status = primaryError?.response?.status;
+      if (status !== 404) {
+        throw primaryError;
+      }
+      return axios({ method, url: legacyUrl, data, ...config });
+    }
+  };
+
   const extractApiError = (requestError, fallback) => {
     const data = requestError?.response?.data;
     if (!data) {
@@ -61,21 +75,30 @@ export default function CISBench({ apiBase }) {
     return parts.length > 0 ? parts.join(" | ") : fallback;
   };
 
-  const loadStatus = async () => {
+  const loadStatus = async (attempt = 1) => {
     try {
-      const response = await axios.get(`${apiBase}/cis-bench/status`);
+      const response = await cisBenchRequest("get", "/status");
       setStatus(response.data || { logged_in: false });
+      setError("");
     } catch (statusError) {
+      if (attempt < 3) {
+        await new Promise((resolve) => setTimeout(resolve, 600 * attempt));
+        return loadStatus(attempt + 1);
+      }
       setStatus({ logged_in: false });
       setError(statusError?.response?.data?.error || "Failed to load cis-bench status.");
     }
   };
 
-  const loadFiles = async () => {
+  const loadFiles = async (attempt = 1) => {
     try {
-      const response = await axios.get(`${apiBase}/cis-bench/files`);
+      const response = await cisBenchRequest("get", "/files");
       setFiles(response.data || []);
     } catch {
+      if (attempt < 3) {
+        await new Promise((resolve) => setTimeout(resolve, 600 * attempt));
+        return loadFiles(attempt + 1);
+      }
       setFiles([]);
     }
   };
@@ -163,7 +186,7 @@ export default function CISBench({ apiBase }) {
 
     setBusy(true);
     try {
-      const response = await axios.post(`${apiBase}/cis-bench/login`, {
+      const response = await cisBenchRequest("post", "/login", {
         mode: "cookies",
         cookies_text: cookiePayload,
         no_verify_ssl: noVerifySSL,
@@ -224,7 +247,7 @@ export default function CISBench({ apiBase }) {
     clearMessages();
     setBusy(true);
     try {
-      const response = await axios.get(`${apiBase}/cis-bench/cookies/export`);
+      const response = await cisBenchRequest("get", "/cookies/export");
       const cookieText = response.data?.cookies_text || "";
       setCookiesText(cookieText);
       setManualCookieEditorOpen(true);
@@ -260,7 +283,7 @@ export default function CISBench({ apiBase }) {
     clearMessages();
     setBusy(true);
     try {
-      const response = await axios.post(`${apiBase}/cis-bench/logout`, {});
+      const response = await cisBenchRequest("post", "/logout", {});
       setMessage(response.data?.message || "Logged out.");
       await loadStatus();
     } catch (logoutError) {
@@ -274,7 +297,7 @@ export default function CISBench({ apiBase }) {
     clearMessages();
     setBusy(true);
     try {
-      const response = await axios.post(`${apiBase}/cis-bench/catalog/refresh`, {
+      const response = await cisBenchRequest("post", "/catalog/refresh", {
         browser: "chrome",
         no_verify_ssl: noVerifySSL,
       });
@@ -290,7 +313,7 @@ export default function CISBench({ apiBase }) {
     clearMessages();
     setBusy(true);
     try {
-      const response = await axios.post(`${apiBase}/cis-bench/search`, searchReq);
+      const response = await cisBenchRequest("post", "/search", searchReq);
       setSearchResults(response.data?.results || []);
       setMessage(`Found ${response.data?.count || 0} benchmark(s).`);
     } catch (searchError) {
@@ -312,7 +335,7 @@ export default function CISBench({ apiBase }) {
     setBusy(true);
     startDownloadProgress(`Downloading benchmark ${benchmark_id}`);
     try {
-      const response = await axios.post(`${apiBase}/cis-bench/download`, {
+      const response = await cisBenchRequest("post", "/download", {
         benchmark_id,
         formats: downloadFormats,
       });
@@ -335,7 +358,7 @@ export default function CISBench({ apiBase }) {
 
     setBusy(true);
     try {
-      const response = await axios.delete(`${apiBase}/cis-bench/files/${encodeURIComponent(name)}`);
+      const response = await cisBenchRequest("delete", `/files/${encodeURIComponent(name)}`);
       setMessage(response.data?.message || `Deleted ${name}.`);
       await loadFiles();
     } catch (deleteError) {
@@ -353,7 +376,7 @@ export default function CISBench({ apiBase }) {
 
     setBusy(true);
     try {
-      const response = await axios.delete(`${apiBase}/cis-bench/files`, { params: { all: true } });
+      const response = await cisBenchRequest("delete", "/files", null, { params: { all: true } });
       setMessage(response.data?.message || "Deleted downloaded files.");
       await loadFiles();
     } catch (deleteError) {
