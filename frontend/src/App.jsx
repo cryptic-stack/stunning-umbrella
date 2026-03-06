@@ -3,11 +3,9 @@ import { AppBar, Box, Container, CssBaseline, Tab, Tabs, Toolbar, Typography } f
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import UploadBenchmarks from "./pages/UploadBenchmarks";
 import VersionComparison from "./pages/VersionComparison";
-import DiffViewer from "./pages/DiffViewer";
 import Settings from "./pages/Settings";
-import GPOImport from "./pages/GPOImport";
-import GPOAssessment from "./pages/GPOAssessment";
-import GPOReports from "./pages/GPOReports";
+import ReportsHub from "./pages/ReportsHub";
+import GPOWorkflow from "./pages/GPOWorkflow";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
 const appTheme = createTheme({
@@ -24,11 +22,9 @@ export default function App() {
     () => [
       <UploadBenchmarks key="upload" apiBase={API_BASE} />,
       <VersionComparison key="compare" apiBase={API_BASE} onReportCreated={setReportId} />,
-      <DiffViewer key="diff" apiBase={API_BASE} reportId={reportId} onReportIdChange={setReportId} />,
+      <ReportsHub key="reports" apiBase={API_BASE} reportId={reportId} onReportIdChange={setReportId} />,
       <Settings key="settings" apiBase={API_BASE} />,
-      <GPOImport key="gpo-import" apiBase={API_BASE} />,
-      <GPOAssessment key="gpo-assessment" apiBase={API_BASE} />,
-      <GPOReports key="gpo-reports" apiBase={API_BASE} />,
+      <GPOWorkflow key="gpo-workflow" apiBase={API_BASE} />,
     ],
     [reportId]
   );
@@ -48,11 +44,9 @@ export default function App() {
           <Tabs value={tab} onChange={(_, value) => setTab(value)}>
             <Tab label="Upload Benchmarks" />
             <Tab label="Version Comparison" />
-            <Tab label="Diff Viewer" />
+            <Tab label="Reports" />
             <Tab label="Settings" />
-            <Tab label="GPO Import" />
-            <Tab label="GPO Assess" />
-            <Tab label="GPO Reports" />
+            <Tab label="GPO Workflow" />
           </Tabs>
         </Box>
         {views[tab]}
