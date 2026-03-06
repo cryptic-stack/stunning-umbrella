@@ -110,7 +110,7 @@ def run_assessment(assessment_run_id: int) -> dict:
     with db_cursor() as (conn, cur):
         cur.execute(
             """
-            SELECT id, policy_source_id, framework_id, version_id
+            SELECT id, policy_source_id, framework_id, version_id, mapping_label, control_level
             FROM assessment_runs
             WHERE id = %s
             """,
@@ -120,7 +120,11 @@ def run_assessment(assessment_run_id: int) -> dict:
         if not run_row:
             raise ValueError(f"assessment run {assessment_run_id} not found")
 
-        _, policy_source_id, framework_id, version_id = run_row
+        _, policy_source_id, framework_id, version_id, mapping_label, control_level = run_row
+        mapping_label = (mapping_label or "").strip()
+        control_level = (control_level or "ALL").strip().upper()
+        if control_level not in {"ALL", "L1", "L2"}:
+            control_level = "ALL"
 
         cur.execute(
             """
@@ -144,18 +148,34 @@ def run_assessment(assessment_run_id: int) -> dict:
                 """
                 SELECT id, rule_id, setting_key, check_type, expected_value
                 FROM benchmark_policy_rules
-                WHERE framework_id = %s AND version_id = %s
+                WHERE framework_id = %s
+                  AND version_id = %s
+                  AND (%s = '' OR source_label = %s)
+                  AND (
+                    %s = 'ALL'
+                    OR UPPER(COALESCE(severity, '')) = %s
+                    OR UPPER(COALESCE(benchmark_ref, '')) LIKE ('%%' || %s || '%%')
+                    OR UPPER(COALESCE(title, '')) LIKE ('%%' || %s || '%%')
+                  )
                 ORDER BY id ASC
                 """,
-                (framework_id, version_id),
+                (framework_id, version_id, mapping_label, mapping_label, control_level, control_level, control_level, control_level),
             )
         else:
             cur.execute(
                 """
                 SELECT id, rule_id, setting_key, check_type, expected_value
                 FROM benchmark_policy_rules
+                WHERE (%s = '' OR source_label = %s)
+                  AND (
+                    %s = 'ALL'
+                    OR UPPER(COALESCE(severity, '')) = %s
+                    OR UPPER(COALESCE(benchmark_ref, '')) LIKE ('%%' || %s || '%%')
+                    OR UPPER(COALESCE(title, '')) LIKE ('%%' || %s || '%%')
+                  )
                 ORDER BY id ASC
                 """,
+                (mapping_label, mapping_label, control_level, control_level, control_level, control_level),
             )
 
         rules = cur.fetchall()

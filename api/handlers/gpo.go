@@ -43,6 +43,7 @@ type gpoAssessmentRequest struct {
 	FrameworkID    *uint  `json:"framework_id"`
 	VersionID      *uint  `json:"version_id"`
 	MappingLabel   string `json:"mapping_label"`
+	ControlLevel   string `json:"control_level"`
 }
 
 type gpoAssessmentView struct {
@@ -51,6 +52,7 @@ type gpoAssessmentView struct {
 	FrameworkID    *uint      `json:"framework_id"`
 	VersionID      *uint      `json:"version_id"`
 	MappingLabel   string     `json:"mapping_label"`
+	ControlLevel   string     `json:"control_level"`
 	Status         string     `json:"status"`
 	Error          string     `json:"error"`
 	CreatedAt      time.Time  `json:"created_at"`
@@ -217,13 +219,21 @@ func (h *Handler) RunGPOAssessment(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "policy_source_id is required"})
 		return
 	}
+	controlLevel := strings.ToUpper(strings.TrimSpace(req.ControlLevel))
+	if controlLevel == "" {
+		controlLevel = "ALL"
+	}
+	if controlLevel != "ALL" && controlLevel != "L1" && controlLevel != "L2" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "control_level must be ALL, L1, or L2"})
+		return
+	}
 
 	var runID uint
 	if err := h.DB.Raw(`
-INSERT INTO assessment_runs (policy_source_id, framework_id, version_id, mapping_label, status, error, created_at)
-VALUES (?, ?, ?, ?, 'queued', '', ?)
+INSERT INTO assessment_runs (policy_source_id, framework_id, version_id, mapping_label, control_level, status, error, created_at)
+VALUES (?, ?, ?, ?, ?, 'queued', '', ?)
 RETURNING id
-`, req.PolicySourceID, req.FrameworkID, req.VersionID, strings.TrimSpace(req.MappingLabel), time.Now().UTC()).Scan(&runID).Error; err != nil {
+`, req.PolicySourceID, req.FrameworkID, req.VersionID, strings.TrimSpace(req.MappingLabel), controlLevel, time.Now().UTC()).Scan(&runID).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create assessment run"})
 		return
 	}
@@ -239,7 +249,7 @@ RETURNING id
 		return
 	}
 
-	c.JSON(http.StatusAccepted, gin.H{"assessment_run_id": runID, "status": "queued"})
+	c.JSON(http.StatusAccepted, gin.H{"assessment_run_id": runID, "status": "queued", "control_level": controlLevel})
 }
 
 func (h *Handler) ListGPOAssessments(c *gin.Context) {

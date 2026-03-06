@@ -67,11 +67,14 @@ def _import_mapping(payload: dict) -> dict:
 
 
 def _create_assessment_run(payload: dict) -> int:
+    control_level = (payload.get("control_level") or "ALL").strip().upper()
+    if control_level not in {"ALL", "L1", "L2"}:
+        control_level = "ALL"
     with db_cursor() as (conn, cur):
         cur.execute(
             """
-            INSERT INTO assessment_runs (policy_source_id, framework_id, version_id, mapping_label, status, error)
-            VALUES (%s, %s, %s, %s, 'running', '')
+            INSERT INTO assessment_runs (policy_source_id, framework_id, version_id, mapping_label, control_level, status, error)
+            VALUES (%s, %s, %s, %s, %s, 'running', '')
             RETURNING id
             """,
             (
@@ -79,6 +82,7 @@ def _create_assessment_run(payload: dict) -> int:
                 int(payload.get("framework_id")) if payload.get("framework_id") else None,
                 int(payload.get("version_id")) if payload.get("version_id") else None,
                 (payload.get("mapping_label") or "").strip(),
+                control_level,
             ),
         )
         run_id = int(cur.fetchone()[0])

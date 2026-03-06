@@ -18,6 +18,7 @@ type Handler struct {
 func NewHandler(db *gorm.DB, redisClient *redis.Client, uploadDir, exportDir string) *Handler {
 	if db != nil {
 		_ = db.Exec("ALTER TABLE diff_reports ADD COLUMN IF NOT EXISTS control_level TEXT NOT NULL DEFAULT 'ALL'").Error
+		_ = db.Exec("ALTER TABLE assessment_runs ADD COLUMN IF NOT EXISTS control_level TEXT NOT NULL DEFAULT 'ALL'").Error
 		_ = db.Exec("ALTER TABLE uploaded_files ADD COLUMN IF NOT EXISTS file_hash TEXT DEFAULT ''").Error
 		_ = db.Exec("CREATE INDEX IF NOT EXISTS idx_uploaded_files_file_hash ON uploaded_files(file_hash)").Error
 		_ = db.Exec("ALTER TABLE diff_items ADD COLUMN IF NOT EXISTS reviewed BOOLEAN NOT NULL DEFAULT FALSE").Error
@@ -102,6 +103,7 @@ CREATE TABLE IF NOT EXISTS assessment_runs (
 	framework_id BIGINT REFERENCES frameworks(id) ON DELETE SET NULL,
 	version_id BIGINT REFERENCES versions(id) ON DELETE SET NULL,
 	mapping_label TEXT NOT NULL DEFAULT '',
+	control_level TEXT NOT NULL DEFAULT 'ALL',
 	status TEXT NOT NULL DEFAULT 'queued',
 	error TEXT NOT NULL DEFAULT '',
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

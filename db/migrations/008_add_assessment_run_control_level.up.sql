@@ -1,0 +1,3 @@
+ALTER TABLE assessment_runs
+ADD COLUMN IF NOT EXISTS control_level TEXT NOT NULL DEFAULT 'ALL';
+

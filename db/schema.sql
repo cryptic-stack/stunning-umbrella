@@ -155,6 +155,7 @@ CREATE TABLE IF NOT EXISTS assessment_runs (
     framework_id BIGINT REFERENCES frameworks(id) ON DELETE SET NULL,
     version_id BIGINT REFERENCES versions(id) ON DELETE SET NULL,
     mapping_label TEXT NOT NULL DEFAULT '',
+    control_level TEXT NOT NULL DEFAULT 'ALL',
     status TEXT NOT NULL DEFAULT 'queued',
     error TEXT NOT NULL DEFAULT '',
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
