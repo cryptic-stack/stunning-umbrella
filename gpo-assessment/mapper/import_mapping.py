@@ -42,7 +42,7 @@ def _parse_expected_value(raw_value):
 
 def _load_rows(path: Path) -> list[dict]:
     if path.suffix.lower() == ".json":
-        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload = json.loads(path.read_text(encoding="utf-8-sig"))
         if isinstance(payload, dict) and "rules" in payload:
             payload = payload["rules"]
         return [dict(item) for item in payload]
